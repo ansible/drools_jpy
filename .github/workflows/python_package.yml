@@ -1,0 +1,45 @@
+name: Drools JPY Package
+env:
+  PIP_NO_BINARY: jpy
+
+on:
+  push:
+    branches: [ 'main' ]
+  pull_request:
+    branches: [ 'main' ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [ "3.9", "3.10" ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Java 
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '11'
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Upgrade pip
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade build
+          python3 -m pip install tox tox-gh-actions flake8 black isort
+      - name: Run flake8
+        run: flake8 .
+      - name: Run formatter
+        run: black --check .
+      - name: Run isort
+        run: isort --check .
+      - name: Install package
+        run: python3 -m build
+      - name: Run tox
+        run: tox

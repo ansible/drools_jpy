@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=61.2", "jpy"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drools_jpy"
+version = "0.0.1"
+authors = [
+  { name="Madhu Kanoor", email="author@example.com" },
+]
+description = "A python package to directly call drools java classes from python"
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache License",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+]
+dependencies = [
+"jpy",
+]
+
+[project.optional-dependencies]
+dev = [
+  'flake8',
+  'black',
+  'isort',
+  'tox',
+]
+tests = [
+  'coverage>=5.0.3',
+  'pytest',
+  'tox',
+]
+
+[project.urls]
+"Homepage" = "https://github.com/mkanoor/drools_jpy"
+"Bug Tracker" = "https://github.com/mkanoor/drools_jpy/issues"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+drools_jpy = ["*.jar"]
+
+
+
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+isolated_build = True
+envlist = py39,py310
+
+[gh-actions]
+python =
+    3.9: py39
+    3.10: py310
+
+[testenv]
+deps = pytest               # PYPI package providing pytest,
+       jpy
+       tox-wheel
+commands = pytest {posargs} # substitute with tox' positional arguments
+wheels = true
+"""
+
+[tool.flake8]
+max-line-length = 79
+count = true
+exclude = [
+      '.tox',
+      'docs',
+      'venv',
+      '.venv',
+]
+
+
+[tool.black]
+line-length = 79
+
+[tool.isort]
+profile = 'black'

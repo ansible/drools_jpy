@@ -9,7 +9,9 @@ def test_create_ruleset():
     )
 
     for i in range(4):
-        durable_rules_engine.assert_event(session_id, json.dumps(dict(i=i)))
+        result = durable_rules_engine.assert_event(
+            session_id, json.dumps(dict(i=i))
+        )
         result = durable_rules_engine.start_action_for_state(
             session_id, session_id
         )

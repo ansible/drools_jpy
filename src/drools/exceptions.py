@@ -1,8 +1,8 @@
-class MessageNotHandledError(Exception):
+class MessageNotHandledException(Exception):
     pass
 
 
-class MessageObservedError(Exception):
+class MessageObservedException(Exception):
     pass
 
 

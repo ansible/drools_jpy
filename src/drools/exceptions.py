@@ -4,3 +4,7 @@ class MessageNotHandledError(Exception):
 
 class MessageObservedError(Exception):
     pass
+
+
+class RulesetNotFoundError(Exception):
+    pass

@@ -3,11 +3,12 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import jpy
 import jpyutil
 
-from .exceptions import MessageNotHandledError, MessageObservedError
+from .exceptions import MessageNotHandledError, RulesetNotFoundError
 from .rule import Rule
 
 DEFAULT_JAR = "jars/drools-yaml-rules-durable-rest-1.0.0-SNAPSHOT-runner.jar"
@@ -19,6 +20,9 @@ class Ruleset:
     name: str
     serialized_ruleset: str
     _rules: dict = field(init=False, repr=False, default_factory=dict)
+
+    def __post_init__(self):
+        RulesetCollection.add(self)
 
     def add_rule(self, rule: Rule) -> None:
         self._rules[rule.name] = rule
@@ -36,15 +40,16 @@ class Ruleset:
             serialized_fact,
         )
 
-    def assert_fact(self, serialized_fact):
+    def assert_fact(self, serialized_fact: str):
         return self._process_response(
             self._api.assertFact(self.session_id, serialized_fact),
             serialized_fact,
         )
 
-    def retract_fact(self, session_id, serialized_fact):
+    def retract_fact(self, serialized_fact: str):
         return self._process_response(
-            self._api.retractFact(session_id, serialized_fact), serialized_fact
+            self._api.retractFact(self.session_id, serialized_fact),
+            serialized_fact,
         )
 
     def get_facts(self):
@@ -73,16 +78,6 @@ class Ruleset:
                 "Message not handled " + serialized_msg
             )
 
-    def _handle_result(self, result, message):
-        if result[0] == 1:
-            raise MessageNotHandledError(message)
-        elif result[0] == 2:
-            raise MessageObservedError(message)
-        elif result[0] == 3:
-            return 0
-
-        return result[1]
-
     def _make_jpy_instance(self):
         jar_file_path = os.environ.get("DROOLS_JPY_CLASSPATH")
         if jar_file_path is None:
@@ -100,3 +95,39 @@ class Ruleset:
             "org.drools.yaml.durable.jpy.JpyDurableRulesEngine"
         )
         self._api = JpyDurableRulesEngine_JavaAPI()
+
+
+@dataclass
+class RulesetCollection:
+    __cached_objects: ClassVar[dict[str, Rule]] = {}
+
+    @classmethod
+    def add(cls, ruleset: Ruleset):
+        cls.__cached_objects[ruleset.name] = ruleset
+
+    @classmethod
+    def get(cls, name: str) -> Ruleset:
+        if name not in cls.__cached_objects:
+            raise RulesetNotFoundError("Ruleset " + name + " not found")
+
+        return cls.__cached_objects[name]
+
+    @classmethod
+    def post(cls, name: str, serialized_event: str):
+        return cls.get(name).assert_event(serialized_event)
+
+    @classmethod
+    def assert_event(cls, name: str, serialized_event: str):
+        return cls.get(name).assert_event(serialized_event)
+
+    @classmethod
+    def assert_fact(cls, name: str, serialized_fact: str):
+        return cls.get(name).assert_fact(serialized_fact)
+
+    @classmethod
+    def retract_fact(cls, name: str, serialized_fact: str):
+        return cls.get(name).retract_fact(serialized_fact)
+
+    @classmethod
+    def get_facts(cls):
+        return cls.get(name).get_facts()

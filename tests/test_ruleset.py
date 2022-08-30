@@ -37,6 +37,11 @@ def test_ruleset_collection():
     assert RulesetCollection.get("b") == rs
 
 
+def test_ruleset_collection_missing_object():
+    with pytest.raises(drools.exceptions.RulesetNotFoundError):
+        RulesetCollection.get("non_existent_object")
+
+
 def test_ruleset_handled_msg_via_collection():
     my_callback1 = mock.Mock()
     my_callback2 = mock.Mock()

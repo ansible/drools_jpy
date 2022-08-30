@@ -106,28 +106,30 @@ class RulesetCollection:
         cls.__cached_objects[ruleset.name] = ruleset
 
     @classmethod
-    def get(cls, name: str) -> Ruleset:
-        if name not in cls.__cached_objects:
-            raise RulesetNotFoundError("Ruleset " + name + " not found")
+    def get(cls, ruleset_name: str) -> Ruleset:
+        if ruleset_name not in cls.__cached_objects:
+            raise RulesetNotFoundError(
+                "Ruleset " + ruleset_name + " not found"
+            )
 
-        return cls.__cached_objects[name]
-
-    @classmethod
-    def post(cls, name: str, serialized_event: str):
-        return cls.get(name).assert_event(serialized_event)
+        return cls.__cached_objects[ruleset_name]
 
     @classmethod
-    def assert_event(cls, name: str, serialized_event: str):
-        return cls.get(name).assert_event(serialized_event)
+    def post(cls, ruleset_name: str, serialized_event: str):
+        return cls.get(ruleset_name).assert_event(serialized_event)
 
     @classmethod
-    def assert_fact(cls, name: str, serialized_fact: str):
-        return cls.get(name).assert_fact(serialized_fact)
+    def assert_event(cls, ruleset_name: str, serialized_event: str):
+        return cls.get(ruleset_name).assert_event(serialized_event)
 
     @classmethod
-    def retract_fact(cls, name: str, serialized_fact: str):
-        return cls.get(name).retract_fact(serialized_fact)
+    def assert_fact(cls, ruleset_name: str, serialized_fact: str):
+        return cls.get(ruleset_name).assert_fact(serialized_fact)
 
     @classmethod
-    def get_facts(cls):
-        return cls.get(name).get_facts()
+    def retract_fact(cls, ruleset_name: str, serialized_fact: str):
+        return cls.get(ruleset_name).retract_fact(serialized_fact)
+
+    @classmethod
+    def get_facts(cls, ruleset_name: str):
+        return cls.get(ruleset_name).get_facts()

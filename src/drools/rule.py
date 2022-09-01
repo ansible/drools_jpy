@@ -5,7 +5,7 @@ from typing import Callable
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Rule:
     name: str
     callback: Callable

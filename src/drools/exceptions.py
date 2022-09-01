@@ -8,3 +8,7 @@ class MessageObservedException(Exception):
 
 class RulesetNotFoundError(Exception):
     pass
+
+
+class RuleNotFoundError(Exception):
+    pass

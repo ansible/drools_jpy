@@ -12,3 +12,11 @@ class RulesetNotFoundError(Exception):
 
 class RuleNotFoundError(Exception):
     pass
+
+
+class InvalidRuleMissingConditionError(Exception):
+    pass
+
+
+class InvalidRuleError(Exception):
+    pass

@@ -4,12 +4,14 @@ import logging
 import os
 from dataclasses import dataclass, field
 from typing import ClassVar
+import time
 
 import jpy
 import jpyutil
 
 from .exceptions import RuleNotFoundError, RulesetNotFoundError
 from .rule import Rule
+from .ruleset_evaluator import RulesetEvaluator
 
 DEFAULT_JAR = "jars/drools-yaml-rules-durable-rest-1.0.0-SNAPSHOT-runner.jar"
 logger = logging.getLogger(__name__)
@@ -55,6 +57,7 @@ class Matches:
 class Ruleset:
     name: str
     serialized_ruleset: str
+    context: dict
     _rules: dict = field(init=False, repr=False, default_factory=dict)
     _session_id: int = field(init=False, repr=False, default=None)
     _api: int = field(
@@ -63,6 +66,9 @@ class Ruleset:
 
     def __post_init__(self):
         RulesetCollection.add(self)
+        self._ruleset_evaluator = RulesetEvaluator(
+            self.serialized_ruleset, self.context
+        )
 
     def add_rule(self, rule: Rule) -> None:
         self._rules[rule.name] = rule
@@ -75,33 +81,46 @@ class Ruleset:
         if self._session_id:
             return self._session_id
 
-        self._session_id = self._api.createRuleset(
-            self.name, self.serialized_ruleset
-        )
+        # self._session_id = self._api.createRuleset(
+        #    self.name, self.serialized_ruleset
+        # )
+        self._session_id = time.time_ns()
         return self._session_id
 
     def end_session(self) -> None:
         pass
 
     def assert_event(self, serialized_fact: str):
+        return self._process_evaluator_response(serialized_fact)
+
+    def assert_fact(self, serialized_fact: str):
+        return self._process_evaluator_assert_fact(serialized_fact)
+
+    def retract_fact(self, serialized_fact: str):
+        return self._process_evaluator_retract_fact(serialized_fact)
+
+    def get_facts(self):
+        return self._ruleset_evaluator.get_facts()
+
+    def assert_event_drools(self, serialized_fact: str):
         return self._process_response(
             self._api.assertEvent(self._session_id, serialized_fact),
             serialized_fact,
         )
 
-    def assert_fact(self, serialized_fact: str):
+    def assert_fact_drools(self, serialized_fact: str):
         return self._process_response(
             self._api.assertFact(self._session_id, serialized_fact),
             serialized_fact,
         )
 
-    def retract_fact(self, serialized_fact: str):
+    def retract_fact_drools(self, serialized_fact: str):
         return self._process_response(
             self._api.retractFact(self._session_id, serialized_fact),
             serialized_fact,
         )
 
-    def get_facts(self):
+    def get_facts_drools(self):
         return self._api.getFacts(self._session_id)
 
     def get_pending_events(self):
@@ -117,13 +136,33 @@ class Ruleset:
         resp = self._api.advanceState()
         return resp
 
-    def _process_response(self, result: int, serialized_msg: str):
-        while (response := self._start_action_for_state()) is not None:
-            _, payload, _ = response
-            self._dispatch(payload)
+    def _process_evaluator_response(self, serialized_msg: str):
+        event = json.loads(serialized_msg)
+        responses = self._ruleset_evaluator.process(event)
+
+        for response in responses:
+            self._dispatch(response)
+
+    def _process_evaluator_assert_fact(self, serialized_msg: str):
+        fact = json.loads(serialized_msg)
+        responses = self._ruleset_evaluator.assert_fact(fact)
+
+        for response in responses:
+            self._dispatch(response)
+
+    def _process_evaluator_retract_fact(self, serialized_msg: str):
+        fact = json.loads(serialized_msg)
+        responses = self._ruleset_evaluator.retract_fact(fact)
+
+        for response in responses:
+            self._dispatch(response)
 
     def _dispatch(self, payload: str) -> None:
-        matches = json.loads(payload)
+        if isinstance(payload, str):
+            matches = json.loads(payload)
+        else:
+            matches = payload
+
         for key, value in matches.items():
             if key in self._rules:
                 if len(value.keys()) == 1 and "m" in value.keys():

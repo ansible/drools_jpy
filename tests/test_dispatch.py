@@ -1,3 +1,4 @@
+import json
 from unittest import mock
 
 import pytest
@@ -12,8 +13,17 @@ def test_run():
     my_callback = mock.Mock()
 
     result = Matches(_m={"m": {"i": 3}}, m=SingleMatchData(_d={"i": 3}))
-    dr_rules = '{"fred": {"all": [{"m": {"i": 3}}]}}'
-    rs = Ruleset(name="Ruleset1", serialized_ruleset=dr_rules)
+
+    rules = [
+        {"condition": {"all": ["event.i == 3"]}, "action": {"debug": None}}
+    ]
+
+    rs = Ruleset(
+        name="Ruleset1",
+        serialized_ruleset=json.dumps(rules),
+        context=dict(fact=dict(arch="x64")),
+    )
+
     rs.add_rule(Rule("fred", my_callback))
     session_id = rs.start_session()
     serialized_result = '{"fred": {"m": {"i": 3}}}'
@@ -34,8 +44,20 @@ def test_missing_session_id():
 def test_missing_rule():
     my_callback = mock.Mock()
 
-    dr_rules = '{"fred": {"all": [{"m": {"i": 3}}]}}'
-    rs = Ruleset(name="Ruleset1", serialized_ruleset=dr_rules)
+    rules = [
+        {
+            "name": "fred",
+            "condition": {"all": ["event.i == 3"]},
+            "action": {"debug": None},
+        }
+    ]
+
+    rs = Ruleset(
+        name="Ruleset1",
+        serialized_ruleset=json.dumps(rules),
+        context=dict(fact=dict(arch="x64")),
+    )
+
     rs.add_rule(Rule("fred", my_callback))
     session_id = rs.start_session()
     serialized_result = '{"wilma": {"m": {"i": 3}}}'

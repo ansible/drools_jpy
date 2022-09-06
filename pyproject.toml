@@ -20,6 +20,7 @@ classifiers = [
 ]
 dependencies = [
 "jpy",
+"jinja2",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +28,8 @@ dev = [
   'flake8',
   'black',
   'isort',
+  'pytest',
+  'coverage',
   'tox',
 ]
 tests = [

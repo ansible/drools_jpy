@@ -1,6 +1,5 @@
 import logging
 
-import jpy
 import jpyutil
 
 _logger = logging.getLogger(__name__)
@@ -12,6 +11,8 @@ class JpyDurableRulesEngine:
             classpath = [classpath]
 
         jpyutil.init_jvm(jvm_maxmem="512M", jvm_classpath=classpath)
+
+        import jpy
 
         JpyDurableRulesEngine_JavaAPI = jpy.get_type(
             "org.drools.yaml.durable.jpy.JpyDurableRulesEngine"

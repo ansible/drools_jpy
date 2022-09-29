@@ -17,3 +17,19 @@ Needs
   tox
   python3 -m build
 ```
+
+# Check code coverage
+
+```
+   coverage run -m pytest
+   coverage html
+   open htmlcov/index.html
+```
+
+# Format and lint the code
+
+```
+   black .
+   flake8 .
+   isort .		
+```

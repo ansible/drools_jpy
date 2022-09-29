@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drools_jpy"
-version = "0.0.3"
+version = "0.0.4"
 authors = [
   { name="Madhu Kanoor", email="author@example.com" },
 ]
@@ -28,6 +28,7 @@ dev = [
   'black',
   'isort',
   'tox',
+  'pyyaml',
 ]
 tests = [
   'coverage>=5.0.3',
@@ -62,6 +63,7 @@ python =
 deps = pytest               # PYPI package providing pytest,
        jpy
        tox-wheel
+       pyyaml
 commands = pytest {posargs} # substitute with tox' positional arguments
 wheels = true
 """

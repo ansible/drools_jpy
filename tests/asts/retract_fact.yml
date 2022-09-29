@@ -1,0 +1,23 @@
+- RuleSet:
+    hosts:
+    - all
+    name: Test retract fact
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: print_event
+            action_args: {}
+        condition:
+          AllCondition:
+          - IsNotDefinedExpression:
+              Event: i
+        enabled: true
+        name: null
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          limit: 5
+        source_filters: []
+        source_name: range

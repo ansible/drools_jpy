@@ -50,6 +50,36 @@ def test_assert_event():
     my_callback.assert_called_with(result)
 
 
+def test_assert_multiple_facts():
+    test_data = load_ast("asts/multiple_hosts.yml")
+
+    my_callback1 = mock.Mock()
+    my_callback2 = mock.Mock()
+    result1 = Matches(
+        data={"m": {"os": "windows", "host": "B"}, "m_1": {"i": 1}}
+    )
+    result2 = Matches(
+        data={"m": {"os": "linux", "host": "A"}, "m_1": {"i": 4}}
+    )
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+    rs.assert_fact(json.dumps(dict(host="A", os="linux")))
+    rs.assert_fact(json.dumps(dict(host="B", os="windows")))
+    rs.assert_fact(json.dumps(dict(host="C", os="macos")))
+
+    rs.add_rule(Rule("Host 1 rule", my_callback1))
+    rs.add_rule(Rule("Host 2 rule", my_callback2))
+
+    rs.assert_event(json.dumps(dict(i=1)))
+    rs.assert_event(json.dumps(dict(i=4)))
+    rs.end_session()
+    my_callback1.assert_called_with(result1)
+    my_callback2.assert_called_with(result2)
+
+
 def test_multiple_rulesets():
     test_data = load_ast("asts/multiple_rule_ast.yml")
     fired_callbacks = []

@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import ClassVar, Dict
 
 import jpyutil
 
@@ -123,7 +123,7 @@ class Ruleset:
 
 @dataclass
 class RulesetCollection:
-    __cached_objects: ClassVar[dict[str, Rule]] = {}
+    __cached_objects: ClassVar[Dict[str, Ruleset]] = {}
 
     @classmethod
     def add(cls, ruleset: Ruleset):

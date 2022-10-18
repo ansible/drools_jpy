@@ -141,6 +141,7 @@ def test_assert_event_with_undefined():
     assert not my_callback2.called
 
 
+@pytest.mark.skip(reason="not supported anymore")
 def test_assert_event_with_fact():
     test_data = load_ast("asts/fact_and_event.yml")
 
@@ -172,6 +173,30 @@ def test_assert_fact():
     rs.add_rule(Rule("fact check", my_callback))
 
     rs.assert_fact(json.dumps(dict(i=67)))
+    rs.end_session()
+    my_callback.assert_called_with(result)
+
+
+def test_and_single_result():
+    test_data = load_ast("asts/rules_with_and.yml")
+
+    my_callback = mock.Mock()
+    result = Matches(data={"m": {"i": 67}})
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+
+    for rule_data in ruleset_data["rules"]:
+        rule_name = rule_data["Rule"]["name"]
+        my_callback = mock.Mock()
+        rs.add_rule(Rule(rule_name, my_callback))
+
+    rs.assert_event(json.dumps(dict(i=1)))
+    rs.assert_event(json.dumps(dict(i=2)))
+    rs.assert_event(json.dumps(dict(i=3)))
+    rs.assert_event(json.dumps(dict(i=67)))
     rs.end_session()
     my_callback.assert_called_with(result)
 

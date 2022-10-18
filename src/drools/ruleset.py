@@ -27,7 +27,8 @@ def _make_jpy_instance():
             errno.ENOENT, os.strerror(errno.ENOENT), jar_file_path
         )
 
-    jpyutil.init_jvm(jvm_maxmem="512M", jvm_classpath=[jar_file_path])
+    max_mem = os.environ.get("DROOLS_JPY_JVM_MAXMEM", "512M")
+    jpyutil.init_jvm(jvm_maxmem=max_mem, jvm_classpath=[jar_file_path])
 
     import jpy
 

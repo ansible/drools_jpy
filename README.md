@@ -13,7 +13,7 @@ Needs
   source venv/bin/activate
   python3 -m pip install --upgrade pip
   python3 -m pip install --upgrade build
-  python3 -m pip install -e .
+  python3 -m pip install -e '.[dev]'
   tox
   python3 -m build
 ```
@@ -26,10 +26,21 @@ Needs
    open htmlcov/index.html
 ```
 
-# Format and lint the code
+# Format and lint the code before creating a PR
 
 ```
    black .
    flake8 .
    isort .		
+```
+
+# To publish the package to PyPi
+
+```
+python3 -m pip install --upgrade build
+rm -rf dist
+python3 -m build
+python3 -m pip install --upgrade twine
+python3 -m twine upload dist/*
+
 ```

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drools_jpy"
-version = "0.0.6"
+version = "0.0.7"
 authors = [
   { name="Madhu Kanoor", email="author@example.com" },
 ]
@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
+local = [
   'flake8',
   'black',
   'isort',
@@ -34,6 +34,11 @@ tests = [
   'coverage>=5.0.3',
   'pytest',
   'tox',
+]
+
+dev = [
+  "drools_jpy[local]",
+  "drools_jpy[tests]",
 ]
 
 [project.urls]

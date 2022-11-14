@@ -10,8 +10,12 @@ import jpyutil
 from .exceptions import RuleNotFoundError, RulesetNotFoundError
 from .rule import Rule
 
-DEFAULT_JAR = "jars/drools-yaml-rules-durable-rest-1.0.0-SNAPSHOT-runner.jar"
-DEFAULT_DROOLS_CLASS = "org.drools.yaml.core.jpy.AstRulesEngine"
+DEFAULT_JAR = (
+    "jars/drools-ansible-rulebook-integration-runtime-1.0.0-SNAPSHOT.jar"
+)
+DEFAULT_DROOLS_CLASS = (
+    "org.drools.ansible.rulebook.integration.core.jpy.AstRulesEngine"
+)
 
 logger = logging.getLogger(__name__)
 

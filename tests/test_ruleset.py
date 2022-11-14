@@ -220,9 +220,9 @@ def test_retract_fact():
     rs.retract_fact(json.dumps(dict(i=67)))
 
     my_callback.assert_called_with(result)
-    response = rs.get_facts()[0]
+    response = rs.get_facts()
     rs.end_session()
-    assert "j" in response.keys()
+    assert len(response) == 0
 
 
 def test_get_facts():
@@ -240,7 +240,7 @@ def test_get_facts():
 
     response = rs.get_facts()
     rs.end_session()
-    assert len(response) == 2
+    assert len(response) == 0
 
 
 def test_assert_event_no_matching_rules():
@@ -470,9 +470,8 @@ def test_retract_fact_via_collection():
     my_callback.assert_called_with(result)
 
     retract_fact(ruleset_data["name"], json.dumps(dict(i=67)))
-    response = get_facts(ruleset_data["name"])[0]
-    assert "i" not in response.keys()
-    assert "j" in response.keys()
+    response = get_facts(ruleset_data["name"])
+    assert len(response) == 0
 
 
 def test_get_pending_events_via_collection():

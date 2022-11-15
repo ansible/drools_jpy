@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drools_jpy"
-version = "0.0.9"
+version = "0.1.0"
 authors = [
   { name="Madhu Kanoor", email="author@example.com" },
 ]
-description = "A python package to directly call drools java classes from python"
+description = "A Python package to directly call drools java classes from python"
 readme = "README.md"
 license = { file="LICENSE" }
 requires-python = ">=3.7"
@@ -57,13 +57,14 @@ drools_jpy = ["*.jar"]
 legacy_tox_ini = """
 [tox]
 isolated_build = True
-envlist = py38,py39,py310
+envlist = py38,py39,py310,py311
 
 [gh-actions]
 python =
     3.8: py38
     3.9: py39
     3.10: py310
+    3.11: py311
 
 [testenv]
 passenv = JAVA_HOME

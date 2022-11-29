@@ -88,13 +88,11 @@ class Ruleset:
     pseudo_clock: bool = False
     _rules: dict = field(init=False, repr=False, default_factory=dict)
     _session_id: int = field(init=False, repr=False, default=None)
-    _api: int = field(
-        init=False, repr=False, default_factory=_make_jpy_instance
-    )
 
     def __post_init__(self):
-        RulesetCollection.add(self)
+        self._api = RulesetCollection.api()
         self.start_session()
+        RulesetCollection.add(self)
 
     def add_rule(self, rule: Rule) -> None:
         self._rules[rule.name] = rule
@@ -143,6 +141,9 @@ class Ruleset:
         pass
 
     def _process_response(self, payload: str):
+        if payload is None:
+            return
+
         results = json.loads(payload)
         for result in results:
             self._dispatch(result)
@@ -160,6 +161,27 @@ class Ruleset:
 @dataclass
 class RulesetCollection:
     __cached_objects: ClassVar[Dict[str, Ruleset]] = {}
+    engine = None
+
+    @classmethod
+    def api(cls):
+        cls.create_engine()
+        return cls.engine
+
+    @classmethod
+    def create_engine(cls):
+        if not cls.engine:
+            cls.engine = _make_jpy_instance()
+
+    @classmethod
+    def response_port(cls):
+        cls.create_engine()
+        return cls.engine.port()
+
+    @classmethod
+    def shutdown(cls):
+        cls.engine.shutdown()
+        cls.engine = None
 
     @classmethod
     def add(cls, ruleset: Ruleset):
@@ -179,9 +201,10 @@ class RulesetCollection:
         for obj in cls.__cached_objects.values():
             if obj._session_id == session_id:
                 return obj
-            raise RulesetNotFoundError(
-                "Ruleset with session id" + str(session_id) + " not found"
-            )
+
+        raise RulesetNotFoundError(
+            "Ruleset with session id " + str(session_id) + " not found"
+        )
 
 
 def post(ruleset_name: str, serialized_event: str):
@@ -218,3 +241,7 @@ def get_facts(ruleset_name: str):
 
 def get_pending_events(ruleset_name: str):
     return RulesetCollection.get(ruleset_name).get_pending_events()
+
+
+def advance_time(ruleset_name: str, amount: int, units: str):
+    return RulesetCollection.get(ruleset_name).advance_time(amount, units)

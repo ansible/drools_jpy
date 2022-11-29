@@ -489,3 +489,98 @@ def test_get_pending_events_via_collection():
     assert_event(ruleset_data["name"], json.dumps(dict(i=67)))
     assert get_pending_events(ruleset_data["name"]) is None
     my_callback.assert_called_with(result)
+
+
+@pytest.mark.asyncio
+async def test_once_within():
+    test_data = load_ast("asts/test_once_within_ast.yml")
+    my_callback = mock.Mock()
+
+    result1 = Matches(data={"m": {"i": 0, "meta": {"host": "hostA"}}})
+    result2 = Matches(data={"m": {"meta": {"host": "hostB"}, "i": 21}})
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"],
+        serialized_ruleset=json.dumps(ruleset_data),
+        pseudo_clock=True,
+    )
+    rs.add_rule(Rule("r1", my_callback))
+
+    current_host = "hostA"
+    for i in list(range(100)):
+        if i > 20:
+            current_host = "hostB"
+        rs.assert_event(json.dumps(dict(i=i, meta=dict(host=current_host))))
+
+    rs.advance_time(11, "Seconds")
+    current_host = "hostA"
+    for i in list(range(100)):
+        if i > 20:
+            current_host = "hostB"
+        rs.assert_event(json.dumps(dict(i=i, meta=dict(host=current_host))))
+
+    rs.end_session()
+
+    assert my_callback.call_count == 4
+    assert my_callback.mock_calls == [
+        mock.call(result1),
+        mock.call(result2),
+        mock.call(result1),
+        mock.call(result2),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_time_window():
+    test_data = load_ast("asts/test_time_window_ast.yml")
+
+    my_callback = mock.Mock()
+    result = Matches(
+        data={
+            "m": {"i": 42, "host": "hostA"},
+            "m_1": {"host": "hostA", "j": 13},
+        }
+    )
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"],
+        serialized_ruleset=json.dumps(ruleset_data),
+        pseudo_clock=True,
+    )
+    rs.add_rule(Rule("r1", my_callback))
+
+    current_host = "hostA"
+
+    rs.assert_event(json.dumps(dict(i=42, host=current_host)))
+    rs.assert_event(json.dumps(dict(j=13, host=current_host)))
+
+    rs.end_session()
+
+    assert my_callback.call_count == 1
+    my_callback.assert_called_with(result)
+
+
+@pytest.mark.asyncio
+async def test_time_window_partial_match():
+    test_data = load_ast("asts/test_time_window_ast.yml")
+    my_callback = mock.Mock()
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"],
+        serialized_ruleset=json.dumps(ruleset_data),
+        pseudo_clock=True,
+    )
+    rs.add_rule(Rule("r1", my_callback))
+
+    current_host = "hostA"
+
+    rs.assert_event(json.dumps(dict(i=42, host=current_host)))
+    rs.advance_time(12, "seconds")
+    rs.assert_event(json.dumps(dict(j=13, host=current_host)))
+
+    rs.end_session()
+
+    assert my_callback.call_count == 0

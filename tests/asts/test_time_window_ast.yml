@@ -1,0 +1,27 @@
+- RuleSet:
+    hosts:
+    - localhost
+    name: All events have to occur within a time window
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - IsDefinedExpression:
+              Event: i
+          - IsDefinedExpression:
+              Event: j
+        enabled: true
+        name: r1
+        time_window: 10 seconds
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          delay: 1
+          limit: 50
+        source_filters: []
+        source_name: range

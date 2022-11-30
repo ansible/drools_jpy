@@ -1,0 +1,27 @@
+- RuleSet:
+    hosts:
+    - localhost
+    name: Match rules once within a certain time
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - IsDefinedExpression:
+              Event: i
+        enabled: true
+        name: r1
+        once_within: 10 seconds
+        unique_attributes:
+        - event.meta.host
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          delay: 1
+          limit: 50
+        source_filters: []
+        source_name: range

@@ -60,6 +60,7 @@ class Matches:
 class Ruleset:
     name: str
     serialized_ruleset: str
+    pseudo_clock: bool = False
     _rules: dict = field(init=False, repr=False, default_factory=dict)
     _session_id: int = field(init=False, repr=False, default=None)
     _api: int = field(
@@ -83,7 +84,9 @@ class Ruleset:
         if self._session_id:
             return self._session_id
 
-        self._session_id = self._api.createRuleset(self.serialized_ruleset)
+        self._session_id = self._api.createRulesetWithOptions(
+            self.serialized_ruleset, self.pseudo_clock
+        )
         return self._session_id
 
     def end_session(self) -> None:
@@ -107,6 +110,9 @@ class Ruleset:
         return self._process_response(
             self._api.retractFact(self._session_id, serialized_fact)
         )
+
+    def advance_time(self, amount: int, units: str):
+        return self._api.advanceTime(self._session_id, amount, units)
 
     def get_pending_events(self):
         pass

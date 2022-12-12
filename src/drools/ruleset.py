@@ -32,7 +32,32 @@ def _make_jpy_instance():
         )
 
     max_mem = os.environ.get("DROOLS_JPY_JVM_MAXMEM", "512M")
-    jpyutil.init_jvm(jvm_maxmem=max_mem, jvm_classpath=[jar_file_path])
+
+    # parse debug port option
+    debug_port = (
+        os.environ.get("DROOLS_JPY_JVM_DEBUG", "False").lower().strip()
+    )
+
+    jvm_options = []
+    if debug_port:
+        if "true" == debug_port:
+            debug_port = 5005  # default debug port for JVM
+        else:
+            try:
+                debug_port = int(debug_port)
+            except ValueError:
+                debug_port = False
+
+        if debug_port:
+            jvm_options = [
+                "-agentlib:jdwp=transport=dt_socket,"
+                "server=y,suspend=y,address=*:" + str(debug_port)
+            ]
+    jpyutil.init_jvm(
+        jvm_maxmem=max_mem,
+        jvm_classpath=[jar_file_path],
+        jvm_options=jvm_options,
+    )
 
     import jpy
 

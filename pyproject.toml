@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drools_jpy"
-version = "0.1.1"
+version = "0.1.3"
 authors = [
   { name="Madhu Kanoor", email="author@example.com" },
 ]
@@ -19,6 +19,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
 ]
 dependencies = [
+"asyncio",
 "jpy",
 ]
 
@@ -33,6 +34,7 @@ local = [
 tests = [
   'coverage>=5.0.3',
   'pytest',
+  'pytest-asyncio',
   'tox',
 ]
 
@@ -72,6 +74,7 @@ deps = pytest               # PYPI package providing pytest,
        jpy
        tox-wheel
        pyyaml
+       pytest-asyncio
 commands = pytest {posargs} # substitute with tox' positional arguments
 wheels = true
 """

@@ -1,0 +1,100 @@
+- RuleSet:
+    hosts:
+    - all
+    name: contains example
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - AndExpression:
+              lhs:
+                EqualsExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                    Integer: 1
+              rhs:
+                ListContainsItemExpression:
+                  lhs:
+                    Event: id_list
+                  rhs:
+                    Integer: 1
+        enabled: true
+        name: contains_rule_int
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - AndExpression:
+              lhs:
+                EqualsExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                    Integer: 2
+              rhs:
+                ListNotContainsItemExpression:
+                  lhs:
+                    Event: id_list
+                  rhs:
+                    Integer: 100
+        enabled: true
+        name: not_contains_rule_int
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - AndExpression:
+              lhs:
+                EqualsExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                    Integer: 3
+              rhs:
+                ListContainsItemExpression:
+                  lhs:
+                    Event: friends
+                  rhs:
+                    String: fred
+        enabled: true
+        name: contains_rule_string
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - AndExpression:
+              lhs:
+                EqualsExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                    Integer: 4
+              rhs:
+                ListNotContainsItemExpression:
+                  lhs:
+                    Event: friends
+                  rhs:
+                    String: pebbles
+        enabled: true
+        name: not_contains_rule_string
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          limit: 10
+        source_filters: []
+        source_name: range

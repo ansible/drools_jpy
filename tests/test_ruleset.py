@@ -668,3 +668,65 @@ async def test_timed_out_not_fired():
     rs.end_session()
 
     assert my_callback.call_count == 0
+
+
+def test_assert_event_with_in():
+    test_data = load_ast("asts/test_in_not_in_ast.yml")
+    my_callback1 = mock.Mock()
+    my_callback2 = mock.Mock()
+    my_callback3 = mock.Mock()
+    my_callback4 = mock.Mock()
+    result1 = Matches(data={"m": {"i": 1}})
+    result2 = Matches(data={"m": {"i": 5}})
+    result3 = Matches(data={"m": {"i": 6, "name": "fred"}})
+    result4 = Matches(data={"m": {"i": 7, "name": "barney"}})
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+    rs.add_rule(Rule("in_rule_int", my_callback1))
+    rs.add_rule(Rule("not_in_rule_int", my_callback2))
+    rs.add_rule(Rule("in_rule_string", my_callback3))
+    rs.add_rule(Rule("not_in_rule_string", my_callback4))
+
+    rs.assert_event(json.dumps(dict(i=1)))
+    rs.assert_event(json.dumps(dict(i=5)))
+    rs.assert_event(json.dumps(dict(i=6, name="fred")))
+    rs.assert_event(json.dumps(dict(i=7, name="barney")))
+
+    rs.end_session()
+    my_callback1.assert_called_with(result1)
+    my_callback2.assert_called_with(result2)
+    my_callback3.assert_called_with(result3)
+    my_callback4.assert_called_with(result4)
+
+
+def test_assert_event_with_contain():
+    test_data = load_ast("asts/test_contains_not_contains_ast.yml")
+    my_callback1 = mock.Mock()
+    my_callback2 = mock.Mock()
+    my_callback3 = mock.Mock()
+    my_callback4 = mock.Mock()
+    result1 = Matches(data={"m": {"i": 1, "id_list": [1, 2, 3]}})
+    result2 = Matches(data={"m": {"i": 2, "id_list": [1, 2, 3]}})
+    result3 = Matches(data={"m": {"i": 3, "friends": ["fred"]}})
+    result4 = Matches(data={"m": {"i": 4, "friends": ["barney"]}})
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+    rs.add_rule(Rule("contains_rule_int", my_callback1))
+    rs.add_rule(Rule("not_contains_rule_int", my_callback2))
+    rs.add_rule(Rule("contains_rule_string", my_callback3))
+    rs.add_rule(Rule("not_contains_rule_string", my_callback4))
+
+    rs.assert_event(json.dumps(dict(i=1, id_list=[1, 2, 3])))
+    rs.assert_event(json.dumps(dict(i=2, id_list=[1, 2, 3])))
+    rs.assert_event(json.dumps(dict(i=3, friends=["fred"])))
+    rs.assert_event(json.dumps(dict(i=4, friends=["barney"])))
+
+    rs.end_session()
+    my_callback1.assert_called_with(result1)
+    my_callback2.assert_called_with(result2)
+    my_callback3.assert_called_with(result3)
+    my_callback4.assert_called_with(result4)

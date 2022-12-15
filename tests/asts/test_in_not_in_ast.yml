@@ -1,0 +1,108 @@
+- RuleSet:
+    hosts:
+    - all
+    name: in example
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - AndExpression:
+              lhs:
+                EqualsExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                    Integer: 1
+              rhs:
+                ItemInListExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                  - Integer: 1
+                  - Integer: 2
+                  - Integer: 3
+        enabled: true
+        name: in_rule_int
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - AndExpression:
+              lhs:
+                EqualsExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                    Integer: 5
+              rhs:
+                ItemNotInListExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                  - Integer: 10
+                  - Integer: 20
+                  - Integer: 30
+        enabled: true
+        name: not_in_rule_int
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - AndExpression:
+              lhs:
+                EqualsExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                    Integer: 6
+              rhs:
+                ItemInListExpression:
+                  lhs:
+                    Event: name
+                  rhs:
+                  - String: fred
+                  - String: barney
+                  - String: wilma
+                  - String: betty
+        enabled: true
+        name: in_rule_string
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - AndExpression:
+              lhs:
+                EqualsExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                    Integer: 7
+              rhs:
+                ItemNotInListExpression:
+                  lhs:
+                    Event: name
+                  rhs:
+                  - String: pebbles
+                  - String: bamm-bamm
+        enabled: true
+        name: not_in_rule_string
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          limit: 10
+        source_filters: []
+        source_name: range

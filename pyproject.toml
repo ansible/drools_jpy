@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drools_jpy"
-version = "0.1.3"
+version = "0.1.4"
 authors = [
   { name="Madhu Kanoor", email="author@example.com" },
 ]
-description = "A Python package to directly call drools java classes from python"
+description = "A Python package to directly call Drools Java classes from python"
 readme = "README.md"
 license = { file="LICENSE" }
 requires-python = ">=3.7"

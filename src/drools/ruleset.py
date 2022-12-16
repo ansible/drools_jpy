@@ -33,12 +33,13 @@ def _make_jpy_instance():
 
     max_mem = os.environ.get("DROOLS_JPY_JVM_MAXMEM", "512M")
 
+    jvm_options = []
+
     # parse debug port option
     debug_port = (
         os.environ.get("DROOLS_JPY_JVM_DEBUG", "False").lower().strip()
     )
 
-    jvm_options = []
     if debug_port:
         if "true" == debug_port:
             debug_port = 5005  # default debug port for JVM
@@ -49,10 +50,33 @@ def _make_jpy_instance():
                 debug_port = False
 
         if debug_port:
-            jvm_options = [
+            jvm_options.append(
                 "-agentlib:jdwp=transport=dt_socket,"
                 "server=y,suspend=y,address=*:" + str(debug_port)
-            ]
+            )
+
+    # parse log config options
+    # assumes the options listed here:
+    # https://www.slf4j.org/api/org/slf4j/simple/SimpleLogger.html
+    # without the `org.slf4j.simpleLogger.` prefix; e.g.:
+    #      defaultLogLevel=trace
+    # stands for:
+    #       org.slf4j.simpleLogger.defaultLogLevel=trace
+    # comma separated list. e.g.:
+    #       defaultLogLevel=trace,logFile=/file/path
+    # stands for:
+    #       -Dorg.slf4j.simpleLogger.defaultLogLevel=trace
+    #       -Dorg.slf4j.simpleLogger.logFile=/file/path
+
+    log_options = (os.environ.get("DROOLS_JPY_JVM_LOG", "")).split(
+        ","
+    )  # split on comma
+    jvm_log_options = [
+        "-Dorg.slf4j.simpleLogger." + kv for kv in log_options
+    ]  # add prefix
+
+    jvm_options.extend(jvm_log_options)
+
     jpyutil.init_jvm(
         jvm_maxmem=max_mem,
         jvm_classpath=[jar_file_path],

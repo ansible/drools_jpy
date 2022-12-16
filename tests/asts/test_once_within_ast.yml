@@ -15,7 +15,7 @@
         enabled: true
         name: r1
         once_within: 10 seconds
-        unique_attributes:
+        group_by_attributes:
         - event.meta.host
         - event.alert.level
     sources:

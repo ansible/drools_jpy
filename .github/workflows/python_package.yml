@@ -1,7 +1,4 @@
 name: Drools JPY Package
-env:
-  PIP_NO_BINARY: jpy
-
 on:
   push:
     branches: [ 'main' ]

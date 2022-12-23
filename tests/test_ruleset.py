@@ -70,10 +70,10 @@ def test_assert_multiple_facts():
     my_callback1 = mock.Mock()
     my_callback2 = mock.Mock()
     result1 = Matches(
-        data={"m": {"os": "windows", "host": "B"}, "m_1": {"i": 1}}
+        data={"m_0": {"os": "windows", "host": "B"}, "m_1": {"i": 1}}
     )
     result2 = Matches(
-        data={"m": {"os": "linux", "host": "A"}, "m_1": {"i": 4}}
+        data={"m_0": {"os": "linux", "host": "A"}, "m_1": {"i": 4}}
     )
 
     ruleset_data = test_data[0]["RuleSet"]
@@ -358,7 +358,7 @@ def test_assert_event_multiple_conditions_all_no_assignment():
     )
     rs.add_rule(Rule("multiple conditions", my_callback))
 
-    result = Matches(data={"m": {"i": 0}, "m_1": {"i": 1}})
+    result = Matches(data={"m_0": {"i": 0}, "m_1": {"i": 1}})
     rs.assert_event(json.dumps(dict(i=9)))
     rs.assert_event(json.dumps(dict(i=1)))
     rs.assert_event(json.dumps(dict(i=0)))
@@ -574,7 +574,7 @@ def test_time_window():
     my_callback = mock.Mock()
     result = Matches(
         data={
-            "m": {"i": 42, "host": "hostA"},
+            "m_0": {"i": 42, "host": "hostA"},
             "m_1": {"host": "hostA", "j": 13},
         }
     )

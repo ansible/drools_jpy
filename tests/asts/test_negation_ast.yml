@@ -1,0 +1,59 @@
+- RuleSet:
+    hosts:
+    - all
+    name: Negation tests
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: print_event
+            action_args: {}
+        condition:
+          AllCondition:
+          - NegateExpression:
+              Event: b
+        enabled: true
+        name: r1
+    - Rule:
+        action:
+          Action:
+            action: print_event
+            action_args: {}
+        condition:
+          AllCondition:
+          - Event: bt
+        enabled: true
+        name: r2
+    - Rule:
+        action:
+          Action:
+            action: print_event
+            action_args: {}
+        condition:
+          AllCondition:
+          - NegateExpression:
+              OrExpression:
+                lhs:
+                  GreaterThanExpression:
+                    lhs:
+                      Event: i
+                    rhs:
+                      Integer: 50
+                rhs:
+                  LessThanExpression:
+                    lhs:
+                      Event: i
+                    rhs:
+                      Integer: 10
+        enabled: true
+        name: r3
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - b: false
+          - bt: true
+          - i: 10
+        source_filters: []
+        source_name: generic

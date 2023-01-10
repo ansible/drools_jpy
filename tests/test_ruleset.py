@@ -730,3 +730,47 @@ def test_assert_event_with_contain():
     my_callback2.assert_called_with(result2)
     my_callback3.assert_called_with(result3)
     my_callback4.assert_called_with(result4)
+
+
+def test_assert_event_float():
+    test_data = load_ast("asts/test_float_ast.yml")
+
+    my_callback = mock.Mock()
+    result = Matches(data={"m": {"pi": 3.14159}})
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+    rs.add_rule(Rule("r1", my_callback))
+
+    rs.assert_event(json.dumps(dict(pi=3.14159)))
+    rs.end_session()
+    my_callback.assert_called_with(result)
+
+
+def test_assert_event_negation():
+    test_data = load_ast("asts/test_negation_ast.yml")
+
+    my_callback1 = mock.Mock()
+    my_callback2 = mock.Mock()
+    my_callback3 = mock.Mock()
+    result1 = Matches(data={"m": {"b": False}})
+    result2 = Matches(data={"m": {"bt": True}})
+    result3 = Matches(data={"m": {"i": 10}})
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+    rs.add_rule(Rule("r1", my_callback1))
+    rs.add_rule(Rule("r2", my_callback2))
+    rs.add_rule(Rule("r3", my_callback3))
+
+    rs.assert_event(json.dumps(dict(i=10)))
+    rs.assert_event(json.dumps(dict(b=False)))
+    rs.assert_event(json.dumps(dict(bt=True)))
+    rs.end_session()
+    my_callback1.assert_called_with(result1)
+    my_callback2.assert_called_with(result2)
+    my_callback3.assert_called_with(result3)

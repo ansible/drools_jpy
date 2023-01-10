@@ -1,0 +1,27 @@
+- RuleSet:
+    hosts:
+    - all
+    name: floats test
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Event: pi
+              rhs:
+                Float: 3.14159
+        enabled: true
+        name: r1
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+            pi: 3.14159
+        source_filters: []
+        source_name: generic

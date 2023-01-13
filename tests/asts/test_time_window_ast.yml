@@ -14,9 +14,9 @@
               Event: i
           - IsDefinedExpression:
               Event: j
+          timeout: 10 seconds
         enabled: true
         name: r1
-        time_window: 10 seconds
     sources:
     - EventSource:
         name: range

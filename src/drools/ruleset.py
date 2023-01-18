@@ -68,7 +68,17 @@ def _make_jpy_instance():
     #       -Dorg.slf4j.simpleLogger.defaultLogLevel=trace
     #       -Dorg.slf4j.simpleLogger.logFile=/file/path
 
-    log_options = (os.environ.get("DROOLS_JPY_JVM_LOG", "")).split(
+    common = "showDateTime=true,dateTimeFormat=yyyy-MM-dd HH:mm:ss SSS"
+    if logging.DEBUG >= logging.root.level:
+        default_log_str = "logFile=System.out,defaultLogLevel=debug," + common
+    elif logging.INFO >= logging.root.level:
+        default_log_str = "logFile=System.out,defaultLogLevel=info," + common
+    else:
+        default_log_str = "logFile=System.err,defaultLogLevel=error," + common
+
+    log_options = (
+        os.environ.get("DROOLS_JPY_JVM_LOG", default_log_str)
+    ).split(
         ","
     )  # split on comma
     jvm_log_options = [
@@ -109,7 +119,6 @@ class Matches:
 class Ruleset:
     name: str
     serialized_ruleset: str
-    pseudo_clock: bool = False
     _rules: dict = field(init=False, repr=False, default_factory=dict)
     _session_id: int = field(init=False, repr=False, default=None)
 
@@ -130,10 +139,9 @@ class Ruleset:
     def start_session(self) -> int:
         if self._session_id:
             return self._session_id
-
-        self._session_id = self._api.createRulesetWithOptions(
-            self.serialized_ruleset, self.pseudo_clock
-        )
+        logger.debug("Creating Drools Ruleset")
+        self._session_id = self._api.createRuleset(self.serialized_ruleset)
+        logger.debug("Ruleset Session ID : " + str(self._session_id))
         return self._session_id
 
     def end_session(self) -> None:
@@ -175,6 +183,12 @@ class Ruleset:
     def _dispatch(self, rule_match: dict) -> None:
         for name, value in rule_match.items():
             if name in self._rules:
+                logger.debug(
+                    "Calling rule : "
+                    + name
+                    + " in session: "
+                    + str(self._session_id)
+                )
                 self._rules[name].callback(Matches(data=value))
             else:
                 raise RuleNotFoundError(

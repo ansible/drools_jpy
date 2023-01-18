@@ -1,7 +1,7 @@
 - RuleSet:
     hosts:
     - localhost
-    name: Match rules once within a certain time
+    name: Trigger if not all events match within a time window
     rules:
     - Rule:
         action:
@@ -9,16 +9,14 @@
             action: debug
             action_args: {}
         condition:
-          AllCondition:
+          NotAllCondition:
           - IsDefinedExpression:
               Event: i
+          - IsDefinedExpression:
+              Event: j
+          timeout: 10 seconds
         enabled: true
         name: r1
-        throttle:
-          once_within: 10 seconds
-          group_by_attributes:
-          - event.meta.host
-          - event.alert.level
     sources:
     - EventSource:
         name: range

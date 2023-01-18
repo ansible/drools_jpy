@@ -1,7 +1,7 @@
 - RuleSet:
     hosts:
     - localhost
-    name: If not all events match within a time window
+    name: Match rules once after a certain time
     rules:
     - Rule:
         action:
@@ -12,11 +12,13 @@
           AllCondition:
           - IsDefinedExpression:
               Event: i
-          - IsDefinedExpression:
-              Event: j
         enabled: true
         name: r1
-        timed_out: 10 seconds
+        throttle:
+          once_after: 10 seconds
+          group_by_attributes:
+          - event.meta.host
+          - event.alert.level
     sources:
     - EventSource:
         name: range

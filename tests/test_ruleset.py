@@ -532,7 +532,6 @@ def test_once_within():
     rs = Ruleset(
         name=ruleset_data["name"],
         serialized_ruleset=json.dumps(ruleset_data),
-        pseudo_clock=True,
     )
     rs.add_rule(Rule("r1", my_callback))
 
@@ -568,6 +567,55 @@ def test_once_within():
     ]
 
 
+@pytest.mark.asyncio
+async def test_once_after():
+    test_data = load_ast("asts/test_once_after_ast.yml")
+    reader, writer = await establish_async_channel()
+    async_task = asyncio.create_task(handle_async_messages(reader, writer))
+    my_callback = mock.Mock(wraps=TaskCanceller(async_task))
+
+    result = Matches(
+        data={
+            "m_0": {
+                "alert": {"level": "warning", "msg": "Low disk space"},
+                "i": 0,
+                "meta": {"host": "A"},
+            },
+            "m_1": {
+                "alert": {"level": "error", "msg": "Disk failure"},
+                "i": 21,
+                "meta": {"host": "B"},
+            },
+        }
+    )
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"],
+        serialized_ruleset=json.dumps(ruleset_data),
+    )
+    rs.add_rule(Rule("r1", my_callback))
+
+    current_host = "A"
+    alert = dict(level="warning", msg="Low disk space")
+    for i in list(range(100)):
+        if i > 20:
+            current_host = "B"
+            alert = dict(level="error", msg="Disk failure")
+        rs.assert_event(
+            json.dumps(dict(alert=alert, i=i, meta=dict(host=current_host)))
+        )
+
+    rs.advance_time(11, "Seconds")
+    await async_task
+    rs.end_session()
+
+    assert my_callback.call_count == 1
+    assert my_callback.mock_calls == [
+        mock.call(result),
+    ]
+
+
 def test_time_window():
     test_data = load_ast("asts/test_time_window_ast.yml")
 
@@ -583,7 +631,6 @@ def test_time_window():
     rs = Ruleset(
         name=ruleset_data["name"],
         serialized_ruleset=json.dumps(ruleset_data),
-        pseudo_clock=True,
     )
     rs.add_rule(Rule("r1", my_callback))
 
@@ -606,7 +653,6 @@ def test_time_window_partial_match():
     rs = Ruleset(
         name=ruleset_data["name"],
         serialized_ruleset=json.dumps(ruleset_data),
-        pseudo_clock=True,
     )
     rs.add_rule(Rule("r1", my_callback))
 
@@ -623,7 +669,7 @@ def test_time_window_partial_match():
 
 @pytest.mark.asyncio
 async def test_timed_out():
-    test_data = load_ast("asts/test_timedout_ast.yml")
+    test_data = load_ast("asts/test_not_all_ast.yml")
     reader, writer = await establish_async_channel()
     async_task = asyncio.create_task(handle_async_messages(reader, writer))
     my_callback = mock.Mock(wraps=TaskCanceller(async_task))
@@ -632,7 +678,6 @@ async def test_timed_out():
     rs = Ruleset(
         name=ruleset_data["name"],
         serialized_ruleset=json.dumps(ruleset_data),
-        pseudo_clock=True,
     )
     rs.add_rule(Rule("r1", my_callback))
 
@@ -648,7 +693,7 @@ async def test_timed_out():
 
 @pytest.mark.asyncio
 async def test_timed_out_not_fired():
-    test_data = load_ast("asts/test_timedout_ast.yml")
+    test_data = load_ast("asts/test_not_all_ast.yml")
     reader, writer = await establish_async_channel()
     async_task = asyncio.create_task(handle_async_messages(reader, writer))
     my_callback = mock.Mock(wraps=TaskCanceller(async_task))
@@ -657,7 +702,6 @@ async def test_timed_out_not_fired():
     rs = Ruleset(
         name=ruleset_data["name"],
         serialized_ruleset=json.dumps(ruleset_data),
-        pseudo_clock=True,
     )
     rs.add_rule(Rule("r1", my_callback))
 

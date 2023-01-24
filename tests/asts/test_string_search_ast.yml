@@ -1,0 +1,150 @@
+- RuleSet:
+    hosts:
+    - all
+    name: 58 String searches
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: echo
+            action_args:
+              message: match works
+        condition:
+          AllCondition:
+          - SearchMatchesExpression:
+              lhs:
+                Event: url1
+              rhs:
+                SearchType:
+                  kind:
+                    String: match
+                  options:
+                  - name:
+                      String: ignorecase
+                    value:
+                      Boolean: true
+                  - name:
+                      String: multiline
+                    value:
+                      Boolean: true
+                  pattern:
+                    String: https://example.com/users/.*/resources
+        enabled: true
+        name: match
+    - Rule:
+        action:
+          Action:
+            action: echo
+            action_args:
+              message: search works
+        condition:
+          AllCondition:
+          - SearchMatchesExpression:
+              lhs:
+                Event: url2
+              rhs:
+                SearchType:
+                  kind:
+                    String: search
+                  pattern:
+                    String: groups/.*/resources/.*
+        enabled: true
+        name: search
+    - Rule:
+        action:
+          Action:
+            action: echo
+            action_args:
+              message: Regex works
+        condition:
+          AllCondition:
+          - SearchMatchesExpression:
+              lhs:
+                Event: url3
+              rhs:
+                SearchType:
+                  kind:
+                    String: regex
+                  pattern:
+                    String: example\.com/others/foo
+        enabled: true
+        name: regex
+    - Rule:
+        action:
+          Action:
+            action: echo
+            action_args:
+              message: not match works
+        condition:
+          AllCondition:
+          - SearchNotMatchesExpression:
+              lhs:
+                Event: url4
+              rhs:
+                SearchType:
+                  kind:
+                    String: match
+                  options:
+                  - name:
+                      String: ignorecase
+                    value:
+                      Boolean: true
+                  - name:
+                      String: multiline
+                    value:
+                      Boolean: true
+                  pattern:
+                    String: https://example.com/users/.*/resources
+        enabled: true
+        name: not match
+    - Rule:
+        action:
+          Action:
+            action: echo
+            action_args:
+              message: not search works
+        condition:
+          AllCondition:
+          - SearchNotMatchesExpression:
+              lhs:
+                Event: url5
+              rhs:
+                SearchType:
+                  kind:
+                    String: search
+                  pattern:
+                    String: groups/.*/resources/.*
+        enabled: true
+        name: not search
+    - Rule:
+        action:
+          Action:
+            action: echo
+            action_args:
+              message: not regex works
+        condition:
+          AllCondition:
+          - SearchNotMatchesExpression:
+              lhs:
+                Event: url6
+              rhs:
+                SearchType:
+                  kind:
+                    String: regex
+                  pattern:
+                    String: example\.com/others/foo
+        enabled: true
+        name: not regex
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - url1: https://example.com/users/foo/resources/bar
+          - url2: https://example.com/groups/foo/resources/bar
+          - url3: https://example.com/others/foo/resources/bar
+          - url4: https://redhat.com/users/foo/resources/bar
+          - url5: https://redhat.com/abc/foo/resources/bar
+          - url6: https://redhat.com/xyz/foo/resources/bar
+        source_filters: []
+        source_name: generic

@@ -818,3 +818,29 @@ def test_assert_event_negation():
     my_callback1.assert_called_with(result1)
     my_callback2.assert_called_with(result2)
     my_callback3.assert_called_with(result3)
+
+
+def test_assert_event_string_search():
+    test_data = load_ast("asts/test_string_search_ast.yml")
+    callbacks = {}
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+
+    for rule_data in ruleset_data["rules"]:
+        rule_name = rule_data["Rule"]["name"]
+        my_callback = mock.Mock()
+        callbacks[rule_name] = my_callback
+        rs.add_rule(Rule(rule_name, my_callback))
+
+    for event in ruleset_data["sources"][0]["EventSource"]["source_args"][
+        "payload"
+    ]:
+        rs.assert_event(json.dumps(event))
+
+    for rule_name, cb in callbacks.items():
+        assert cb.called
+
+    rs.end_session()

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drools_jpy"
-version = "0.1.8"
+version = "0.1.9"
 authors = [
   { name="Madhu Kanoor", email="author@example.com" },
 ]
@@ -34,6 +34,7 @@ tests = [
   'coverage>=5.0.3',
   'pytest',
   'pytest-asyncio',
+  'pytest-cov',
   'tox',
 ]
 

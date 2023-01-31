@@ -682,7 +682,7 @@ async def test_timed_out():
     rs.add_rule(Rule("r1", my_callback))
 
     rs.assert_event(json.dumps(dict(i=42, host="A")))
-    result = Matches(data={"m": {"i": 42, "host": "A"}})
+    result = Matches(data={"m_0": {"i": 42, "host": "A"}})
     rs.advance_time(12, "seconds")
     await async_task
     rs.end_session()

@@ -49,7 +49,6 @@ def test_bad_rulesets():
 
 def test_assert_event():
     test_data = load_ast("asts/rules_with_assignment.yml")
-
     my_callback = mock.Mock()
     result = Matches(data={"first": {"i": 67}})
 
@@ -60,6 +59,7 @@ def test_assert_event():
     rs.add_rule(Rule("assignment", my_callback))
 
     rs.assert_event(json.dumps(dict(i=67)))
+
     rs.end_session()
     my_callback.assert_called_with(result)
 
@@ -822,6 +822,42 @@ def test_assert_event_negation():
 
 def test_assert_event_string_search():
     test_data = load_ast("asts/test_string_search_ast.yml")
+    callbacks = {}
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+
+    for rule_data in ruleset_data["rules"]:
+        rule_name = rule_data["Rule"]["name"]
+        my_callback = mock.Mock()
+        callbacks[rule_name] = my_callback
+        rs.add_rule(Rule(rule_name, my_callback))
+
+    for event in ruleset_data["sources"][0]["EventSource"]["source_args"][
+        "payload"
+    ]:
+        rs.assert_event(json.dumps(event))
+
+    for rule_name, cb in callbacks.items():
+        assert cb.called
+
+    rs.end_session()
+
+
+@pytest.mark.parametrize(
+    "rulebook",
+    [
+        "asts/test_selectattr_1_ast.yml",
+        "asts/test_selectattr_2_ast.yml",
+        "asts/test_selectattr_3_ast.yml",
+        "asts/test_select_1_ast.yml",
+        "asts/test_select_2_ast.yml",
+    ],
+)
+def test_integrated(rulebook):
+    test_data = load_ast(rulebook)
     callbacks = {}
 
     ruleset_data = test_data[0]["RuleSet"]

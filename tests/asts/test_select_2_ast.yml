@@ -1,0 +1,64 @@
+- RuleSet:
+    hosts:
+    - all
+    name: 62 select 2
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: echo
+            action_args:
+              message: Some one lives on Main Street
+        condition:
+          AllCondition:
+          - SelectExpression:
+              lhs:
+                Event: addresses
+              rhs:
+                operator:
+                  String: regex
+                value:
+                  String: Main St
+        enabled: true
+        name: r1
+    - Rule:
+        actions:
+        - Action:
+            action: echo
+            action_args:
+              message: No one lives on Major St
+        condition:
+          AllCondition:
+          - SelectNotExpression:
+              lhs:
+                Event: addresses
+              rhs:
+                operator:
+                  String: regex
+                value:
+                  String: Major St
+        enabled: true
+        name: r2
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - addresses:
+            - 123 Main St, Bedrock, MI
+            - 545 Spring St, Cresskill, NJ
+            - 435 Wall Street, New York, NY
+            age: 54
+            name: Fred
+          - addresses:
+            - 345 Bleeker St, Bedrock, MI
+            - 145 Wall St, Dumont, NJ
+            age: 53
+            name: Barney
+          - addresses:
+            - 123 Main St, Bedrock, MI
+            - 432 Raymond Blvd, Newark, NJ
+            age: 47
+            name: Wilma
+        source_filters: []
+        source_name: generic

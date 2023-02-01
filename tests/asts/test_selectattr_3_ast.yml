@@ -1,0 +1,35 @@
+- RuleSet:
+    hosts:
+    - all
+    name: 65 selectattr 3
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: echo
+            action_args:
+              message: Has a person greater than 30
+        condition:
+          AllCondition:
+          - SelectAttrExpression:
+              lhs:
+                Event: person
+              rhs:
+                key:
+                  String: age
+                operator:
+                  String: '>'
+                value:
+                  Integer: 30
+        enabled: true
+        name: r1
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - person:
+              age: 54
+              name: Fred
+        source_filters: []
+        source_name: generic

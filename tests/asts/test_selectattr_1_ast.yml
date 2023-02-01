@@ -1,0 +1,72 @@
+- RuleSet:
+    hosts:
+    - all
+    name: 63 selectattr 1
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: echo
+            action_args:
+              message: Has a person greater than 30
+        condition:
+          AllCondition:
+          - SelectAttrExpression:
+              lhs:
+                Event: people
+              rhs:
+                key:
+                  String: person.age
+                operator:
+                  String: '>'
+                value:
+                  Integer: 30
+        enabled: true
+        name: r1
+    - Rule:
+        actions:
+        - Action:
+            action: echo
+            action_args:
+              message: Barney or Fred in friends list
+        condition:
+          AllCondition:
+          - SelectAttrExpression:
+              lhs:
+                Event: friends
+              rhs:
+                key:
+                  String: person.name
+                operator:
+                  String: regex
+                value:
+                  String: Barney|Fred
+        enabled: true
+        name: r2
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - people:
+            - person:
+                age: 54
+                name: Fred
+            - person:
+                age: 45
+                name: Barney
+            - person:
+                age: 23
+                name: Wilma
+            - person:
+                age: 25
+                name: Betty
+          - friends:
+            - person:
+                hobby: golf
+                name: Barney
+            - person:
+                hobby: driving
+                name: Fred
+        source_filters: []
+        source_name: generic

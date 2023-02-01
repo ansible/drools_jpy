@@ -144,8 +144,11 @@ class Ruleset:
         logger.debug("Ruleset Session ID : " + str(self._session_id))
         return self._session_id
 
-    def end_session(self) -> None:
-        self._api.dispose(self._session_id)
+    def end_session(self) -> Dict:
+        result = self._api.dispose(self._session_id)
+        if result:
+            return json.loads(result)
+        return {}
 
     def get_facts(self):
         result = self._api.getFacts(self._session_id)
@@ -269,7 +272,7 @@ def retract_fact(ruleset_name: str, serialized_fact: str):
     )
 
 
-def end_session(ruleset_name: str):
+def end_session(ruleset_name: str) -> Dict:
     return RulesetCollection.get(ruleset_name).end_session()
 
 

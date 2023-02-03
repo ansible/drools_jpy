@@ -1,0 +1,48 @@
+- RuleSet:
+    hosts:
+    - all
+    name: 61 select 1
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: echo
+            action_args:
+              message: Found a player with level greater than 25
+        condition:
+          AllCondition:
+          - SelectExpression:
+              lhs:
+                Event: levels
+              rhs:
+                operator:
+                  String: '>'
+                value:
+                  Integer: 25
+        enabled: true
+        name: r1
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - age: 54
+            levels:
+            - 10
+            - 20
+            - 30
+            name: Fred
+          - age: 53
+            levels:
+            - 11
+            - 15
+            - 16
+            name: Barney
+          - age: 53
+            levels:
+            - 1
+            - 5
+            - 6
+            name: Wilma
+        source_filters: []
+        source_name: generic

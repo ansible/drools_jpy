@@ -840,7 +840,7 @@ def test_assert_event_string_search():
     ]:
         rs.assert_event(json.dumps(event))
 
-    for rule_name, cb in callbacks.items():
+    for _, cb in callbacks.items():
         assert cb.called
 
     rs.end_session()
@@ -854,6 +854,7 @@ def test_assert_event_string_search():
         "asts/test_selectattr_3_ast.yml",
         "asts/test_select_1_ast.yml",
         "asts/test_select_2_ast.yml",
+        "asts/test_null_type_ast.yml",
     ],
 )
 def test_integrated(rulebook):
@@ -876,7 +877,7 @@ def test_integrated(rulebook):
     ]:
         rs.assert_event(json.dumps(event))
 
-    for rule_name, cb in callbacks.items():
+    for _, cb in callbacks.items():
         assert cb.called
 
     rs.end_session()

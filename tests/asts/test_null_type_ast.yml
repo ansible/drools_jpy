@@ -1,0 +1,64 @@
+- RuleSet:
+    hosts:
+    - all
+    name: 70 null
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args:
+              pretty: true
+        condition:
+          AllCondition:
+          - AndExpression:
+              lhs:
+                EqualsExpression:
+                  lhs:
+                    Event: x
+                  rhs:
+                    Integer: 1
+              rhs:
+                EqualsExpression:
+                  lhs:
+                    Event: y
+                  rhs:
+                    NullType: null
+        enabled: true
+        name: r1
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args:
+              pretty: true
+        condition:
+          AllCondition:
+          - SelectAttrExpression:
+              lhs:
+                Event: persons
+              rhs:
+                key:
+                  String: occupation
+                operator:
+                  String: ==
+                value:
+                  NullType: null
+        enabled: true
+        name: r2
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - x: 1
+            y: null
+          - persons:
+            - age: 45
+              name: Fred
+              occupation: Dino Driver
+            - age: 46
+              name: Barney
+              occupation: null
+        source_filters: []
+        source_name: generic

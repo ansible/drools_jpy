@@ -852,6 +852,8 @@ def test_assert_event_string_search():
         "asts/test_selectattr_1_ast.yml",
         "asts/test_selectattr_2_ast.yml",
         "asts/test_selectattr_3_ast.yml",
+        "asts/test_selectattr_4_ast.yml",
+        "asts/test_selectattr_5_ast.yml",
         "asts/test_select_1_ast.yml",
         "asts/test_select_2_ast.yml",
         "asts/test_null_type_ast.yml",

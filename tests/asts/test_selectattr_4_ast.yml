@@ -1,0 +1,41 @@
+- RuleSet:
+    hosts:
+    - all
+    name: Test is selectattr
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args: {}
+        condition:
+          AllCondition:
+          - SelectAttrNotExpression:
+              lhs:
+                Event: my_obj
+              rhs:
+                key:
+                  String: thing.size
+                operator:
+                  String: '>='
+                value:
+                  Integer: 50
+        enabled: true
+        name: Go
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - my_obj:
+            - thing:
+                name: a
+                size: 51
+            - thing:
+                name: b
+                size: 31
+            - thing:
+                name: c
+                size: 99
+        source_filters: []
+        source_name: generic

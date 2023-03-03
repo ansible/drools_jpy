@@ -1,0 +1,30 @@
+- RuleSet:
+    hosts:
+    - all
+    name: Test is select with null
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args: {}
+        condition:
+          AllCondition:
+          - SelectExpression:
+              lhs:
+                Event: my_obj
+              rhs:
+                operator:
+                  String: ==
+                value:
+                  NullType: null
+        enabled: true
+        name: with select
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+            my_obj: null
+        source_filters: []
+        source_name: generic

@@ -849,6 +849,7 @@ def test_assert_event_string_search():
 @pytest.mark.parametrize(
     "rulebook",
     [
+        "asts/test_select_with_null_ast.yml",
         "asts/test_selectattr_1_ast.yml",
         "asts/test_selectattr_2_ast.yml",
         "asts/test_selectattr_3_ast.yml",
@@ -874,9 +875,10 @@ def test_integrated(rulebook):
         callbacks[rule_name] = my_callback
         rs.add_rule(Rule(rule_name, my_callback))
 
-    for event in ruleset_data["sources"][0]["EventSource"]["source_args"][
-        "payload"
-    ]:
+    data = ruleset_data["sources"][0]["EventSource"]["source_args"]["payload"]
+    if not isinstance(data, list):
+        data = [data]
+    for event in data:
         rs.assert_event(json.dumps(event))
 
     for _, cb in callbacks.items():

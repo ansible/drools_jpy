@@ -1,4 +1,5 @@
 import errno
+import glob
 import json
 import logging
 import os
@@ -10,9 +11,6 @@ import jpyutil
 from .exceptions import RuleNotFoundError, RulesetNotFoundError
 from .rule import Rule
 
-DEFAULT_JAR = (
-    "jars/drools-ansible-rulebook-integration-runtime-1.0.0-SNAPSHOT.jar"
-)
 DEFAULT_DROOLS_CLASS = (
     "org.drools.ansible.rulebook.integration.core.jpy.AstRulesEngine"
 )
@@ -20,17 +18,21 @@ DEFAULT_DROOLS_CLASS = (
 logger = logging.getLogger(__name__)
 
 
-def _make_jpy_instance():
-    jar_file_path = os.environ.get("DROOLS_JPY_CLASSPATH")
-    if jar_file_path is None:
-        package_dir = os.path.dirname(os.path.realpath(__file__))
-        jar_file_path = os.path.join(package_dir, DEFAULT_JAR)
+def _get_jar() -> str:
+    package_dir = os.path.dirname(os.path.realpath(__file__))
+    jars = glob.glob(os.path.join(package_dir, "jars", "*.jar"))
+    if len(jars) == 0:
+        raise FileNotFoundError(errno.ENOENT, "No jars found", package_dir)
+    return jars[0]
 
+
+def _make_jpy_instance():
+    jar_file_path = os.environ.get("DROOLS_JPY_CLASSPATH", _get_jar())
     if not os.path.exists(jar_file_path):
         raise FileNotFoundError(
             errno.ENOENT, os.strerror(errno.ENOENT), jar_file_path
         )
-
+    logger.info("Using jar: %s", jar_file_path)
     max_mem = os.environ.get("DROOLS_JPY_JVM_MAXMEM", "512M")
 
     jvm_options = []

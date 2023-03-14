@@ -1,0 +1,44 @@
+- RuleSet:
+    hosts:
+    - all
+    name: Test is select
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args: {}
+        condition:
+          AllCondition:
+          - AndExpression:
+              lhs:
+                EqualsExpression:
+                  lhs:
+                    Event: action
+                  rhs:
+                    String: go
+              rhs:
+                SelectExpression:
+                  lhs:
+                    Event: my_list
+                  rhs:
+                    operator:
+                      String: ==
+                    value:
+                      Event: my_int
+        enabled: true
+        name: Go
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - action: go
+            my_int: 3
+            my_list:
+            - 1
+            - 3
+            - 4
+            - 7
+        source_filters: []
+        source_name: generic

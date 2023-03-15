@@ -15,6 +15,8 @@ DEFAULT_DROOLS_CLASS = (
     "org.drools.ansible.rulebook.integration.core.jpy.AstRulesEngine"
 )
 
+DROOLS_JPY_GC_AFTER = int(os.environ.get("DROOLS_JPY_GC_AFTER", 1000))
+
 logger = logging.getLogger(__name__)
 
 
@@ -250,7 +252,25 @@ class RulesetCollection:
         )
 
 
+message_counter = 0
+java_lang_System = None
+
+
+def call_garbage_collector():
+    global message_counter, java_lang_System
+    if message_counter > DROOLS_JPY_GC_AFTER:
+        if java_lang_System is None:
+            import jpy
+
+            java_lang_System = jpy.get_type("java.lang.System")
+        java_lang_System.gc()
+        message_counter = 0
+    else:
+        message_counter += 1
+
+
 def post(ruleset_name: str, serialized_event: str):
+    call_garbage_collector()
     return RulesetCollection.get(ruleset_name).assert_event(
         _to_json(serialized_event)
     )

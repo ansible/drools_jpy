@@ -258,7 +258,7 @@ java_lang_System = None
 
 def call_garbage_collector():
     global message_counter, java_lang_System
-    if message_counter > DROOLS_JPY_GC_AFTER:
+    if DROOLS_JPY_GC_AFTER > 0 and message_counter > DROOLS_JPY_GC_AFTER:
         if java_lang_System is None:
             import jpy
 

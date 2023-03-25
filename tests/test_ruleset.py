@@ -859,6 +859,7 @@ def test_assert_event_string_search():
         "asts/test_select_2_ast.yml",
         "asts/test_null_type_ast.yml",
         "asts/test_select_with_same_event_ast.yml",
+        "asts/test_self_referential_ast.yml",
     ],
 )
 def test_integrated(rulebook):

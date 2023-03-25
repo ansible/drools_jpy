@@ -1,0 +1,28 @@
+- RuleSet:
+    hosts:
+    - all
+    name: Compare different attributes from same event
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Event: x
+              rhs:
+                Event: y
+        enabled: true
+        name: Self Referential Rule
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - x: Fred
+            y: Fred
+        source_filters: []
+        source_name: generic

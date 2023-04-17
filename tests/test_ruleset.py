@@ -239,6 +239,33 @@ def test_retract_fact():
     assert len(response) == 0
 
 
+def test_retract_matching_facts():
+    test_data = load_ast("asts/retract_matching_facts.yml")
+
+    my_callback1 = mock.Mock()
+    my_callback2 = mock.Mock()
+    result = Matches(data={"m": {"i": 67, "n": 239}})
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+    rs.add_rule(Rule("r1", my_callback1))
+    rs.add_rule(Rule("r2", my_callback2))
+
+    rs.assert_fact(json.dumps(dict(i=67, n=239)))
+    rs.assert_fact(json.dumps(dict(j=42)))
+    assert not my_callback1.called
+
+    assert (len(rs.get_facts())) == 1
+    rs.retract_matching_facts(json.dumps(dict(n=239)), True, [])
+
+    my_callback2.assert_called_with(result)
+    response = rs.get_facts()
+    rs.end_session()
+    assert len(response) == 0
+
+
 def test_get_facts():
     test_data = load_ast("asts/assert_fact.yml")
 
@@ -888,3 +915,50 @@ def test_integrated(rulebook):
         assert cb.called
 
     rs.end_session()
+
+
+def test_default_events_ttl():
+    test_data = load_ast("asts/test_default_events_ttl.yml")
+    my_callback = mock.Mock()
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"],
+        serialized_ruleset=json.dumps(ruleset_data),
+    )
+    rs.add_rule(Rule("r1", my_callback))
+
+    rs.assert_event(json.dumps(dict(i=42)))
+    assert (len(rs.get_facts())) == 1
+    rs.advance_time(40, "seconds")
+    rs.assert_event(json.dumps(dict(j=13)))
+    assert (len(rs.get_facts())) == 0
+
+    rs.end_session()
+
+    assert my_callback.call_count == 0
+
+
+def test_session_stats():
+    test_data = load_ast("asts/test_stats.yml")
+    my_callback = mock.Mock()
+    result = Matches(data={"first": {"i": 67}})
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+    rs.add_rule(Rule("assignment", my_callback))
+
+    rs.assert_event(json.dumps(dict(i=67)))
+    rs.assert_event(json.dumps(dict(j=67)))
+    stats = rs.session_stats()
+
+    assert stats["rulesTriggered"] == 1
+    assert stats["numberOfRules"] == 1
+    assert stats["numberOfDisabledRules"] == 1
+    assert stats["eventsProcessed"] == 2
+    assert stats["eventsMatched"] == 1
+
+    rs.end_session()
+    my_callback.assert_called_with(result)

@@ -1,0 +1,44 @@
+- RuleSet:
+    hosts:
+    - all
+    name: example
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args:
+              pretty: true
+        condition:
+          AllCondition:
+          - GreaterThanExpression:
+              lhs:
+                Event: i
+              rhs:
+                Integer: 2
+          - GreaterThanExpression:
+              lhs:
+                Event: x
+              rhs:
+                Integer: 34
+        enabled: true
+        name: r1
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args:
+              pretty: true
+        condition:
+          AllCondition:
+          - IsNotDefinedExpression:
+              Event: i
+        enabled: true
+        name: r2
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          limit: 10
+        source_filters: []
+        source_name: range

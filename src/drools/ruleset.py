@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import ClassVar, Dict
+from typing import ClassVar, Dict, List
 
 import jpyutil
 
@@ -173,6 +173,21 @@ class Ruleset:
             self._api.retractFact(self._session_id, serialized_fact)
         )
 
+    def retract_matching_facts(
+        self, serialized_fact: str, partial: bool, exclude_keys: List[str]
+    ):
+        return self._process_response(
+            self._api.retractMatchingFacts(
+                self._session_id, serialized_fact, partial, exclude_keys
+            )
+        )
+
+    def session_stats(self) -> Dict:
+        result = self._api.sessionStats(self._session_id)
+        if result:
+            return json.loads(result)
+        return {}
+
     def advance_time(self, amount: int, units: str):
         return self._api.advanceTime(self._session_id, amount, units)
 
@@ -294,8 +309,23 @@ def retract_fact(ruleset_name: str, serialized_fact: str):
     )
 
 
+def retract_matching_facts(
+    ruleset_name: str,
+    serialized_fact: str,
+    partial: bool,
+    exclude_keys: List[str],
+):
+    return RulesetCollection.get(ruleset_name).retract_matching_facts(
+        _to_json(serialized_fact), partial, exclude_keys
+    )
+
+
 def end_session(ruleset_name: str) -> Dict:
     return RulesetCollection.get(ruleset_name).end_session()
+
+
+def session_stats(ruleset_name: str) -> Dict:
+    return RulesetCollection.get(ruleset_name).session_stats()
 
 
 def get_facts(ruleset_name: str):

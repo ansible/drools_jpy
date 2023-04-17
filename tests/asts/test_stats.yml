@@ -1,0 +1,50 @@
+- RuleSet:
+    hosts:
+    - localhost
+    name: Test Stats
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args:
+              events_event: '{{events.first}}'
+        condition:
+          AllCondition:
+          - AssignmentExpression:
+              lhs:
+                Events: first
+              rhs:
+                EqualsExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                    Integer: 67
+        enabled: true
+        name: assignment
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args:
+              events_event: '{{events.first}}'
+        condition:
+          AllCondition:
+          - AssignmentExpression:
+              lhs:
+                Events: first
+              rhs:
+                EqualsExpression:
+                  lhs:
+                    Event: i
+                  rhs:
+                    Integer: 67
+        enabled: false
+        name: disabled1
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          limit: 5
+        source_filters: []
+        source_name: range

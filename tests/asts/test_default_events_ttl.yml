@@ -1,0 +1,34 @@
+- RuleSet:
+    default_events_ttl: 16 seconds
+    hosts:
+    - all
+    name: Evict events which are partially matched
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args:
+              pretty: true
+        condition:
+          AllCondition:
+          - GreaterThanOrEqualToExpression:
+              lhs:
+                Event: i
+              rhs:
+                Integer: 0
+          - GreaterThanExpression:
+              lhs:
+                Event: x
+              rhs:
+                Integer: 34
+        enabled: true
+        name: r1
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          delay: 720
+          limit: 2
+        source_filters: []
+        source_name: range

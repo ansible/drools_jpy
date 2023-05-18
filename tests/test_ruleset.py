@@ -266,6 +266,33 @@ def test_retract_matching_facts():
     assert len(response) == 0
 
 
+def test_retract_matching_facts_complete():
+    test_data = load_ast("asts/retract_matching_facts.yml")
+
+    my_callback1 = mock.Mock()
+    my_callback2 = mock.Mock()
+    result = Matches(data={"m": {"meta": {"uuid": "934"}, "i": 67, "n": 239}})
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+    rs.add_rule(Rule("r1", my_callback1))
+    rs.add_rule(Rule("r2", my_callback2))
+
+    rs.assert_fact(json.dumps(dict(i=67, n=239, meta=dict(uuid="934"))))
+    rs.assert_fact(json.dumps(dict(j=42)))
+    assert not my_callback1.called
+
+    assert (len(rs.get_facts())) == 1
+    rs.retract_matching_facts(json.dumps(dict(i=67, n=239)), True, ["meta"])
+
+    my_callback2.assert_called_with(result)
+    response = rs.get_facts()
+    rs.end_session()
+    assert len(response) == 0
+
+
 def test_get_facts():
     test_data = load_ast("asts/assert_fact.yml")
 

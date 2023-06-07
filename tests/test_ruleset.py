@@ -568,7 +568,10 @@ def test_once_within():
             "m": {
                 "alert": {"level": "warning", "msg": "Low disk space"},
                 "i": 0,
-                "meta": {"host": "A"},
+                "meta": {
+                    "rule_engine": {"once_within_time_window": "10 SECONDS"},
+                    "host": "A",
+                },
             }
         }
     )
@@ -577,7 +580,10 @@ def test_once_within():
             "m": {
                 "alert": {"level": "error", "msg": "Disk failure"},
                 "i": 21,
-                "meta": {"host": "B"},
+                "meta": {
+                    "rule_engine": {"once_within_time_window": "10 SECONDS"},
+                    "host": "B",
+                },
             }
         }
     )
@@ -633,12 +639,24 @@ async def test_once_after():
             "m_0": {
                 "alert": {"level": "warning", "msg": "Low disk space"},
                 "i": 0,
-                "meta": {"host": "A"},
+                "meta": {
+                    "rule_engine": {
+                        "events_in_window": 21,
+                        "once_after_time_window": "10 SECONDS",
+                    },
+                    "host": "A",
+                },
             },
             "m_1": {
                 "alert": {"level": "error", "msg": "Disk failure"},
                 "i": 21,
-                "meta": {"host": "B"},
+                "meta": {
+                    "rule_engine": {
+                        "events_in_window": 79,
+                        "once_after_time_window": "10 SECONDS",
+                    },
+                    "host": "B",
+                },
             },
         }
     )

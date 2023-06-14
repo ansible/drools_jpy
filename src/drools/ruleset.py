@@ -91,6 +91,9 @@ def _make_jpy_instance():
 
     jvm_options.extend(jvm_log_options)
 
+    log_delay = os.environ.get("DROOLS_LOG_DELAY", "5")
+    jvm_options.append("-Ddrools.delay.warning.threshold=" + log_delay)
+
     jpyutil.init_jvm(
         jvm_maxmem=max_mem,
         jvm_classpath=[jar_file_path],

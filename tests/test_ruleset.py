@@ -103,17 +103,15 @@ def test_squared_accessors():
     my_callback4 = mock.Mock()
     my_callback5 = mock.Mock()
     my_callback6 = mock.Mock()
-    result1_and_2 = Matches(
-        data={"m": {"id":"A", "range":{"pi": 3.1415}}}
-    )
+    result1_and_2 = Matches(data={"m": {"id": "A", "range": {"pi": 3.1415}}})
     result3 = Matches(
-        data={"m": {"id":"B", "range":{"pi": {"value":3.1415}}}}
+        data={"m": {"id": "B", "range": {"pi": {"value": 3.1415}}}}
     )
-    result4_and_5 = Matches(
-        data={"m": {"id":"C", "range":[3.1415]}}
-    )
+    result4_and_5 = Matches(data={"m": {"id": "C", "range": [3.1415]}})
     result6 = Matches(
-        data={"m": {"id":"D", "range":{"x": [0, [0, 0, {"a":{"b": 3.1415}}]]}}}
+        data={
+            "m": {"id": "D", "range": {"x": [0, [0, 0, {"a": {"b": 3.1415}}]]}}
+        }
     )
 
     ruleset_data = test_data[0]["RuleSet"]
@@ -127,10 +125,14 @@ def test_squared_accessors():
     rs.add_rule(Rule("r5", my_callback5))
     rs.add_rule(Rule("r6", my_callback6))
 
-    rs.assert_fact(json.dumps({"id":"A", "range":{"pi": 3.1415}}))
-    rs.assert_fact(json.dumps({"id":"B", "range":{"pi": {"value":3.1415}}}))
-    rs.assert_fact(json.dumps({"id":"C", "range":[3.1415]}))
-    rs.assert_fact(json.dumps({"id":"D", "range":{"x": [0, [0, 0, {"a":{"b": 3.1415}}]]}}))
+    rs.assert_fact(json.dumps({"id": "A", "range": {"pi": 3.1415}}))
+    rs.assert_fact(json.dumps({"id": "B", "range": {"pi": {"value": 3.1415}}}))
+    rs.assert_fact(json.dumps({"id": "C", "range": [3.1415]}))
+    rs.assert_fact(
+        json.dumps(
+            {"id": "D", "range": {"x": [0, [0, 0, {"a": {"b": 3.1415}}]]}}
+        )
+    )
 
     rs.end_session()
     my_callback1.assert_called_with(result1_and_2)

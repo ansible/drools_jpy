@@ -1,0 +1,40 @@
+- RuleSet:
+    hosts:
+    - all
+    name: Test squared accessor with selectattr operator
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: debug
+            action_args:
+              msg: Output for testcase
+        condition:
+          AllCondition:
+          - SelectAttrExpression:
+              lhs:
+                Event: asd["x"][1][2].a
+              rhs:
+                key:
+                  String: b
+                operator:
+                  String: ==
+                value:
+                  Float: 3.1415
+        enabled: true
+        name: r1 selectattr and squared accessor interaction
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - asd:
+              x:
+              - 0
+              - - 0
+                - 0
+                - a:
+                    b: 3.1415
+            id: 'Testcase #1'
+        source_filters: []
+        source_name: generic

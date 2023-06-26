@@ -1,0 +1,35 @@
+- RuleSet:
+    hosts:
+    - all
+    name: Test squared accessor
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: debug
+            action_args:
+              msg: 'Testcase #1 passes'
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Event: asd["x"][1][2].a["b"]
+              rhs:
+                Float: 3.1415
+        enabled: true
+        name: 'r1 squared accessor'
+    sources:
+    - EventSource:
+        name: generic
+        source_args:
+          payload:
+          - asd:
+              x:
+              - 0
+              - - 0
+                - 0
+                - a:
+                    b: 3.1415
+            id: 'Testcase #1'
+        source_filters: []
+        source_name: generic

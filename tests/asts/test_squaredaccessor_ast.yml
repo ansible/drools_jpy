@@ -1,0 +1,96 @@
+- RuleSet:
+    hosts:
+    - all
+    name: test squared accessor
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Fact: range['pi']
+              rhs:
+                Float: 3.1415
+        enabled: true
+        name: r1
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Fact: range["pi"]
+              rhs:
+                Float: 3.1415
+        enabled: true
+        name: r2
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Fact: range["pi"].value
+              rhs:
+                Float: 3.1415
+        enabled: true
+        name: r3
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Fact: range[0]
+              rhs:
+                Float: 3.1415
+        enabled: true
+        name: r4
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Fact: range[-1]
+              rhs:
+                Float: 3.1415
+        enabled: true
+        name: r5
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Fact: range["x"][1][2].a["b"]
+              rhs:
+                Float: 3.1415
+        enabled: true
+        name: r6
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          limit: 5
+        source_filters: []
+        source_name: range

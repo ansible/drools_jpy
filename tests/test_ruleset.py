@@ -94,6 +94,55 @@ def test_assert_multiple_facts():
     my_callback2.assert_called_with(result2)
 
 
+def test_squared_accessors():
+    test_data = load_ast("asts/test_squaredaccessor_ast.yml")
+
+    my_callback1 = mock.Mock()
+    my_callback2 = mock.Mock()
+    my_callback3 = mock.Mock()
+    my_callback4 = mock.Mock()
+    my_callback5 = mock.Mock()
+    my_callback6 = mock.Mock()
+    result1_and_2 = Matches(data={"m": {"id": "A", "range": {"pi": 3.1415}}})
+    result3 = Matches(
+        data={"m": {"id": "B", "range": {"pi": {"value": 3.1415}}}}
+    )
+    result4_and_5 = Matches(data={"m": {"id": "C", "range": [3.1415]}})
+    result6 = Matches(
+        data={
+            "m": {"id": "D", "range": {"x": [0, [0, 0, {"a": {"b": 3.1415}}]]}}
+        }
+    )
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"], serialized_ruleset=json.dumps(ruleset_data)
+    )
+    rs.add_rule(Rule("r1", my_callback1))
+    rs.add_rule(Rule("r2", my_callback2))
+    rs.add_rule(Rule("r3", my_callback3))
+    rs.add_rule(Rule("r4", my_callback4))
+    rs.add_rule(Rule("r5", my_callback5))
+    rs.add_rule(Rule("r6", my_callback6))
+
+    rs.assert_fact(json.dumps({"id": "A", "range": {"pi": 3.1415}}))
+    rs.assert_fact(json.dumps({"id": "B", "range": {"pi": {"value": 3.1415}}}))
+    rs.assert_fact(json.dumps({"id": "C", "range": [3.1415]}))
+    rs.assert_fact(
+        json.dumps(
+            {"id": "D", "range": {"x": [0, [0, 0, {"a": {"b": 3.1415}}]]}}
+        )
+    )
+
+    rs.end_session()
+    my_callback1.assert_called_with(result1_and_2)
+    my_callback2.assert_called_with(result1_and_2)
+    my_callback3.assert_called_with(result3)
+    my_callback4.assert_called_with(result4_and_5)
+    my_callback5.assert_called_with(result4_and_5)
+    my_callback6.assert_called_with(result6)
+
+
 def test_multiple_rulesets():
     test_data = load_ast("asts/multiple_rule_ast.yml")
     fired_callbacks = []
@@ -933,6 +982,8 @@ def test_assert_event_string_search():
         "asts/test_select_with_same_event_ast.yml",
         "asts/test_self_referential_ast.yml",
         "asts/test_delayed_comparison_ast.yml",
+        "asts/test_squaredaccessor_cases_ast.yml",
+        "asts/test_squaredaccessor_selectattr_cases_ast.yml",
     ],
 )
 def test_integrated(rulebook):

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drools_jpy"
-version = "0.3.4"
+version = "0.3.5"
 authors = [
   { name="Madhu Kanoor", email="author@example.com" },
 ]
@@ -44,8 +44,8 @@ dev = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/mkanoor/drools_jpy"
-"Bug Tracker" = "https://github.com/mkanoor/drools_jpy/issues"
+"Homepage" = "https://github.com/ansible/drools_jpy"
+"Bug Tracker" = "https://github.com/ansible/drools_jpy/issues"
 
 [tool.setuptools]
 include-package-data = true

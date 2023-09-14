@@ -5,6 +5,7 @@ Needs
    * Java 17+
    * Maven 3.8.1+
    * Environment variable **JAVA_HOME** should be set appropriately
+   * Uses conventional commit. commitlint (use **npm install commitlint**)
 
 # Setup and Testing
 
@@ -14,8 +15,8 @@ Needs
   python3 -m pip install --upgrade pip
   python3 -m pip install --upgrade build
   python3 -m pip install -e '.[dev]'
+  pre-commit install
   tox
-  python3 -m build
 ```
 
 # Check code coverage
@@ -31,7 +32,7 @@ Needs
 ```
    black .
    flake8 .
-   isort .		
+   isort .
 ```
 
 # To publish the package to PyPi

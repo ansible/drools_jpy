@@ -1,0 +1,45 @@
+- RuleSet:
+    hosts:
+    - all
+    name: Non alpha key
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: debug
+            action_args:
+              msg: First check worked
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Event: '["http://www.example.com"]'
+              rhs:
+                String: down
+        enabled: true
+        name: Check key with slash,dot and colon at root level
+    - Rule:
+        actions:
+        - Action:
+            action: debug
+            action_args:
+              msg: Second check worked
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Event: urls["http://www.example.com"]
+              rhs:
+                String: up
+        enabled: true
+        name: Check key with slash,dot and colon at non root level
+    sources:
+    - EventSource:
+        name: ansible.eda.generic
+        source_args:
+          payload:
+          - http://www.example.com: down
+          - urls:
+              http://www.example.com: up
+        source_filters: []
+        source_name: ansible.eda.generic

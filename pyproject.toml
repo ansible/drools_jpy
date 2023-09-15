@@ -29,6 +29,7 @@ local = [
   'isort',
   'tox',
   'pyyaml',
+  'pre-commit',
 ]
 tests = [
   'coverage>=5.0.3',

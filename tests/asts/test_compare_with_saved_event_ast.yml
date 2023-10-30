@@ -1,0 +1,134 @@
+- RuleSet:
+    hosts:
+    - all
+    name: compare with saved events
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args:
+              pretty: true
+        condition:
+          AllCondition:
+          - AssignmentExpression:
+              lhs:
+                Events: match
+              rhs:
+                EqualsExpression:
+                  lhs:
+                    Event: plu
+                  rhs:
+                    Integer: 4132
+          - ItemInListExpression:
+              lhs:
+                Event: fruit
+              rhs:
+                Events: match.apples
+        enabled: true
+        name: Gala rules
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args:
+              pretty: true
+        condition:
+          AllCondition:
+          - AssignmentExpression:
+              lhs:
+                Events: match
+              rhs:
+                EqualsExpression:
+                  lhs:
+                    Event: plu
+                  rhs:
+                    Integer: 4284
+          - ListContainsItemExpression:
+              lhs:
+                Events: match.grapefruits
+              rhs:
+                Event: fruit
+        enabled: true
+        name: Ruby Red rules
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args:
+              pretty: true
+        condition:
+          AllCondition:
+          - AssignmentExpression:
+              lhs:
+                Events: apple
+              rhs:
+                EqualsExpression:
+                  lhs:
+                    Event: fruit.name
+                  rhs:
+                    String: Braeburn
+          - ItemInListExpression:
+              lhs:
+                Events: apple.fruit.plu
+              rhs:
+                Event: favorite_apple_plus
+        enabled: true
+        name: Braeburn rules
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args:
+              pretty: true
+        condition:
+          AllCondition:
+          - AssignmentExpression:
+              lhs:
+                Events: mango
+              rhs:
+                EqualsExpression:
+                  lhs:
+                    Event: fruit.name
+                  rhs:
+                    String: Kent
+          - ListContainsItemExpression:
+              lhs:
+                Event: favorite_mango_plus
+              rhs:
+                Events: mango.fruit.plu
+        enabled: true
+        name: Kent mango rules
+    sources:
+    - EventSource:
+        name: my source
+        source_args:
+          payload:
+          - apples:
+            - gala large apple
+            - gala small apple
+            plu: 4132
+          - fruit: gala large apple
+          - grapefruits:
+            - Ray Ruby
+            - Ruby Red
+            plu: 4284
+          - fruit: Ruby Red
+          - fruit:
+              name: Braeburn
+              plu: 4101
+          - favorite_apple_plus:
+            - 4101
+            - 4103
+            - 4132
+            - 4133
+          - fruit:
+              name: Kent
+              plu: 3488
+          - favorite_mango_plus:
+            - 3488
+            - 4959
+            - 4051
+            - 4312
+        source_filters: []
+        source_name: ansible.eda.generic

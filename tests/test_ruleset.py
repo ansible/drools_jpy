@@ -985,6 +985,8 @@ def test_assert_event_string_search():
         "asts/test_squaredaccessor_cases_ast.yml",
         "asts/test_squaredaccessor_selectattr_cases_ast.yml",
         "asts/test_non_alpha_key_ast.yml",
+        "asts/test_match_multiple_rules_with_all_ast.yml",
+        "asts/test_compare_with_saved_event_ast.yml",
     ],
 )
 def test_integrated(rulebook):

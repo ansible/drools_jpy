@@ -1,0 +1,49 @@
+- RuleSet:
+    hosts:
+    - all
+    match_multiple_rules: true
+    name: 83 match multiple rules
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Event: i
+              rhs:
+                Integer: 1
+        enabled: true
+        name: r1
+    - Rule:
+        actions:
+        - Action:
+            action: print_event
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Event: i
+              rhs:
+                Integer: 1
+          - EqualsExpression:
+              lhs:
+                Event: i
+              rhs:
+                Integer: 3
+        enabled: true
+        name: r11
+    sources:
+    - EventSource:
+        name: ansible.eda.generic
+        source_args:
+          payload:
+          - i: 1
+          - i: 9
+          - i: 3
+        source_filters: []
+        source_name: ansible.eda.generic

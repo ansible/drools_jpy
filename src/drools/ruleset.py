@@ -91,6 +91,8 @@ def _make_jpy_instance():
 
     jvm_options.extend(jvm_log_options)
 
+    jpyutil.preload_jvm_dll()
+
     jpyutil.init_jvm(
         jvm_maxmem=max_mem,
         jvm_classpath=[jar_file_path],

@@ -1061,3 +1061,34 @@ def test_session_stats():
 
     rs.end_session()
     my_callback.assert_called_with(result)
+
+
+@pytest.mark.parametrize(
+    ("number_of_events", "rules_triggered", "events_matched"),
+    [(2, 0, 0), (5, 1, 1), (3, 1, 1)],
+)
+def test_accumulate_within(number_of_events, rules_triggered, events_matched):
+    test_data = load_ast("asts/test_accumulate_within_ast.yml")
+    my_callback = mock.Mock()
+
+    ruleset_data = test_data[0]["RuleSet"]
+    rs = Ruleset(
+        name=ruleset_data["name"],
+        serialized_ruleset=json.dumps(ruleset_data),
+    )
+    rs.add_rule(Rule("r1", my_callback))
+
+    for i in range(number_of_events):
+        rs.assert_event(
+            json.dumps(dict(name="alert", level="error", code=205, index=i))
+        )
+
+    rs.advance_time(60, "seconds")
+    stats = rs.session_stats()
+
+    assert stats["rulesTriggered"] == rules_triggered
+    assert stats["numberOfRules"] == 1
+    assert stats["numberOfDisabledRules"] == 0
+    assert stats["eventsProcessed"] == number_of_events
+    assert stats["eventsMatched"] == events_matched
+    rs.end_session()

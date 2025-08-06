@@ -1,0 +1,46 @@
+- RuleSet:
+    hosts:
+    - localhost
+    name: Test accumulate within
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Event: level
+              rhs:
+                String: error
+        enabled: true
+        name: r1
+        throttle:
+          accumulate_within: 5 minutes
+          group_by_attributes:
+          - event.level
+          - event.code
+          threshold: 3
+    sources:
+    - EventSource:
+        name: Test
+        source_args:
+          event_delay: 60
+          loop_delay: 30
+          payload:
+          - code: 205
+            level: error
+            name: alert1
+          - code: 207
+            level: warning
+            name: alert2
+          - code: 205
+            level: error
+            name: alert3
+          - code: 205
+            level: error
+            name: alert11
+        source_filters: []
+        source_name: ansible.eda.generic

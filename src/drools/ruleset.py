@@ -3,6 +3,7 @@ import glob
 import json
 import logging
 import os
+import tempfile
 from dataclasses import dataclass, field
 from typing import ClassVar, Dict, List
 
@@ -91,6 +92,9 @@ def _make_jpy_instance():
 
     jvm_options.extend(jvm_log_options)
 
+    tmp_dir = tempfile.gettempdir()
+    jvm_options.append(f"-Djava.io.tmpdir={tmp_dir}")
+
     jpyutil.init_jvm(
         jvm_maxmem=max_mem,
         jvm_classpath=[jar_file_path],
@@ -117,12 +121,14 @@ def _from_json(obj):
 @dataclass(frozen=True)
 class Matches:
     data: dict = None
+    matching_uuid: str = None
 
 
 @dataclass
 class Ruleset:
     name: str
     serialized_ruleset: str
+    ha_enabled: bool = field(default=False, repr=False)
     _rules: dict = field(init=False, repr=False, default_factory=dict)
     _session_id: int = field(init=False, repr=False, default=None)
 
@@ -194,6 +200,38 @@ class Ruleset:
     def get_pending_events(self):
         pass
 
+    # HA-specific methods
+    def add_action_info(self, matching_uuid: str, index: int, action: str):
+        """Add an action for a matching event"""
+        self._api.addActionInfo(self._session_id, matching_uuid, index, action)
+
+    def update_action_info(self, matching_uuid: str, index: int, action: str):
+        """Update an existing action"""
+        self._api.updateActionInfo(self._session_id, matching_uuid, index, action)
+
+    def action_info_exists(self, matching_uuid: str, index: int) -> bool:
+        """Check if an action exists"""
+        return self._api.actionInfoExists(self._session_id, matching_uuid, index)
+
+    def get_action_info(self, matching_uuid: str, index: int) -> str:
+        """Get an action by index"""
+        return self._api.getActionInfo(self._session_id, matching_uuid, index)
+
+    def get_action_status(self, matching_uuid: str, index: int) -> str:
+        """Get the stored status for an action"""
+        return self._api.getActionStatus(self._session_id, matching_uuid, index)
+
+    def delete_action_info(self, matching_uuid: str):
+        """Delete all actions and matching events for a matching UUID"""
+        self._api.deleteActionInfo(self._session_id, matching_uuid)
+
+    def get_partial_event_ids(self) -> List:
+        """Get the IDs of partial events in working memory"""
+        result = self._api.getPartialEventIds(self._session_id)
+        if result:
+            return json.loads(result)
+        return []
+
     def _process_response(self, payload: str):
         if payload is None:
             return
@@ -203,19 +241,49 @@ class Ruleset:
             self._dispatch(result)
 
     def _dispatch(self, rule_match: dict) -> None:
-        for name, value in rule_match.items():
-            if name in self._rules:
+        # Check if this is the new format with "name", "events", and "matching_uuid"
+        if "name" in rule_match and "events" in rule_match:
+            # New HA format
+            rule_name = rule_match["name"]
+            events_data = rule_match["events"]
+            matching_uuid = rule_match.get("matching_uuid")
+            match_type = rule_match.get("type")
+
+            if match_type == "MATCHING_EVENT_RECOVERY":
                 logger.debug(
-                    "Calling rule : "
-                    + name
-                    + " in session: "
-                    + str(self._session_id)
+                    "Recovering matching event for rule %s "
+                    "in session %s, matching_uuid=%s",
+                    rule_name, self._session_id, matching_uuid,
                 )
-                self._rules[name].callback(Matches(data=value))
+
+            if rule_name in self._rules:
+                logger.debug(
+                    "Calling rule %s in session %s, "
+                    "matching_uuid=%s",
+                    rule_name, self._session_id, matching_uuid,
+                )
+                self._rules[rule_name].callback(
+                    Matches(data=events_data, matching_uuid=matching_uuid)
+                )
             else:
                 raise RuleNotFoundError(
-                    "Rule " + name + " does not exist in Ruleset " + self.name
+                    f"Rule {rule_name} does not exist "
+                    f"in Ruleset {self.name}"
                 )
+        else:
+            # Legacy format: iterate over items
+            for name, value in rule_match.items():
+                if name in self._rules:
+                    logger.debug(
+                        "Calling rule %s in session %s",
+                        name, self._session_id,
+                    )
+                    self._rules[name].callback(Matches(data=value))
+                else:
+                    raise RuleNotFoundError(
+                        f"Rule {name} does not exist "
+                        f"in Ruleset {self.name}"
+                    )
 
 
 @dataclass
@@ -240,8 +308,36 @@ class RulesetCollection:
 
     @classmethod
     def shutdown(cls):
-        cls.engine.shutdown()
-        cls.engine = None
+        if cls.engine is not None:
+            cls.engine.shutdown()
+            cls.engine = None
+
+    @classmethod
+    def initialize_ha(cls, uuid: str, worker_name: str, db_params: dict, config: dict = None):
+        """Initialize HA mode with UUID and database configuration"""
+        cls.create_engine()
+        db_params_json = json.dumps(db_params)
+        config_json = json.dumps(config) if config else json.dumps({})
+        cls.engine.initializeHA(uuid, worker_name, db_params_json, config_json)
+
+    @classmethod
+    def enable_leader(cls):
+        """Enable leader mode and start writing states to database"""
+        cls.create_engine()
+        cls.engine.enableLeader()
+
+    @classmethod
+    def disable_leader(cls):
+        """Disable leader mode and stop writing to database"""
+        cls.engine.disableLeader()
+
+    @classmethod
+    def get_ha_stats(cls) -> Dict:
+        """Get current HA statistics"""
+        result = cls.engine.getHAStats()
+        if result:
+            return json.loads(result)
+        return {}
 
     @classmethod
     def add(cls, ruleset: Ruleset):
@@ -338,3 +434,78 @@ def get_pending_events(ruleset_name: str):
 
 def advance_time(ruleset_name: str, amount: int, units: str):
     return RulesetCollection.get(ruleset_name).advance_time(amount, units)
+
+
+# Module-level HA functions
+def initialize_ha(uuid: str, worker_name: str, db_params: dict, config: dict = None):
+    """
+    Initialize HA mode with UUID and database configuration
+
+    Args:
+        uuid: Unique identifier for this HA cluster
+        worker_name: Name of the worker node
+        db_params: Database connection parameters
+            - host: Database host
+            - port: Database port
+            - database: Database name
+            - user: Database user
+            - password: Database password
+        config: Optional HA configuration parameters
+    """
+    return RulesetCollection.initialize_ha(uuid, worker_name, db_params, config)
+
+
+def enable_leader():
+    """Enable leader mode and start writing states to database"""
+    return RulesetCollection.enable_leader()
+
+
+def disable_leader():
+    """Disable leader mode and stop writing to database"""
+    return RulesetCollection.disable_leader()
+
+
+def get_ha_stats() -> Dict:
+    """Get current HA statistics"""
+    return RulesetCollection.get_ha_stats()
+
+
+# Action management functions
+def add_action_info(ruleset_name: str, matching_uuid: str, index: int, action: str):
+    """Add an action for a matching event"""
+    return RulesetCollection.get(ruleset_name).add_action_info(matching_uuid, index, action)
+
+
+def update_action_info(ruleset_name: str, matching_uuid: str, index: int, action: str):
+    """Update an existing action"""
+    return RulesetCollection.get(ruleset_name).update_action_info(matching_uuid, index, action)
+
+
+def action_info_exists(ruleset_name: str, matching_uuid: str, index: int) -> bool:
+    """Check if an action exists"""
+    return RulesetCollection.get(ruleset_name).action_info_exists(matching_uuid, index)
+
+
+def get_action_info(ruleset_name: str, matching_uuid: str, index: int) -> str:
+    """Get an action by index"""
+    return RulesetCollection.get(ruleset_name).get_action_info(matching_uuid, index)
+
+
+def get_action_status(ruleset_name: str, matching_uuid: str, index: int) -> str:
+    """Get the stored status for an action"""
+    return RulesetCollection.get(ruleset_name).get_action_status(matching_uuid, index)
+
+
+def delete_action_info(ruleset_name: str, matching_uuid: str):
+    """Delete all actions and matching events for a matching UUID"""
+    return RulesetCollection.get(ruleset_name).delete_action_info(matching_uuid)
+
+
+def get_partial_event_ids(ruleset_name: str) -> List:
+    """Get the IDs of partial events in working memory"""
+    return RulesetCollection.get(ruleset_name).get_partial_event_ids()
+
+# For test convenience
+def shutdown():
+    """Shutdown the AstRulesEngine and close async channels"""
+    RulesetCollection.shutdown()

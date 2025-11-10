@@ -1,0 +1,36 @@
+- RuleSet:
+    hosts:
+    - localhost
+    name: Multiple Actions
+    rules:
+    - Rule:
+        actions:
+        - Action:
+            action: debug
+            action_args:
+              msg: Multiple Action Message1
+        - Action:
+            action: debug
+            action_args:
+              msg: Multiple Action Message2
+        - Action:
+            action: debug
+            action_args:
+              msg: Multiple Action Message3
+        condition:
+          AllCondition:
+          - EqualsExpression:
+              lhs:
+                Event: i
+              rhs:
+                Integer: 1
+        enabled: true
+        name: r1
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          delay: 0.05
+          limit: 5
+        source_filters: []
+        source_name: range

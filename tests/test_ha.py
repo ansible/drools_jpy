@@ -20,6 +20,7 @@ from drools.ruleset import (
     get_action_status,
     action_info_exists,
     delete_action_info,
+    shutdown
 )
 
 
@@ -418,7 +419,14 @@ async def test_ha_failover_scenario(postgres_params):
             except asyncio.CancelledError:
                 pass
 
+    # Shutdown the RulesetCollection to close the AstRulesEngine and async server socket
+    # This allows Leader 2 to create a new engine with a new async server socket
+    print("Shutting down RulesetCollection (simulating Leader 1 JVM shutdown)")
+    shutdown()
+    print("RulesetCollection shut down")
+
     # Leader 2 starts with the SAME HA UUID (part of the same cluster)
+    # This will create a new AstRulesEngine instance with a new async server socket
     reader2, writer2 = await establish_async_channel()
     async_task2 = asyncio.create_task(handle_async_messages(reader2, writer2))
 
@@ -433,8 +441,16 @@ async def test_ha_failover_scenario(postgres_params):
         )
         rs2.add_rule(Rule("assignment", mock.Mock()))
 
+        # Yield to ensure async handler starts reading before enableLeader sends the message
+        print("Yielding to async handler before enabling leader...")
+        await asyncio.sleep(0.1)
+
         enable_leader("leader-2")
         print("Leader 2 enabled")
+
+        # Wait for potential recovery message
+        print("Waiting for recovery message...")
+        await asyncio.sleep(0.5)
 
         # Leader 2 should be able to read the action info created by Leader 1
         assert action_info_exists(ruleset_data["name"], matching_uuid, 0)

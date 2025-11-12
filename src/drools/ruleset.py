@@ -236,6 +236,18 @@ class Ruleset:
             rule_name = rule_match["name"]
             events_data = rule_match["events"]
             matching_uuid = rule_match.get("matching_uuid")
+            type = rule_match.get("type")
+
+            # Do something special for recovery
+            if type and type == "MATCHING_EVENT_RECOVERY":
+                logger.debug(
+                    "Recovering matching event for rule : "
+                    + rule_name
+                    + " in session: "
+                    + str(self._session_id)
+                    + (f" with matching_uuid: {matching_uuid}" if matching_uuid else "")
+                )
+                return
 
             if rule_name in self._rules:
                 logger.debug(
@@ -478,3 +490,8 @@ def get_action_status(ruleset_name: str, matching_uuid: str, index: int) -> str:
 def delete_action_info(ruleset_name: str, matching_uuid: str):
     """Delete all actions and matching events for a matching UUID"""
     return RulesetCollection.get(ruleset_name).delete_action_info(matching_uuid)
+
+# For test convenience
+def shutdown():
+    """Shutdown the AstRulesEngine and close async channels"""
+    RulesetCollection.shutdown()

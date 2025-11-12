@@ -15,9 +15,9 @@ Set these environment variables before running HA tests:
 ```bash
 export POSTGRES_HOST=localhost
 export POSTGRES_PORT=5432
-export POSTGRES_DB=drools_ha_test
-export POSTGRES_USER=postgres
-export POSTGRES_PASSWORD=postgres
+export POSTGRES_DB=eda_ha_db
+export POSTGRES_USER=eda_user
+export POSTGRES_PASSWORD=eda_password
 ```
 
 Alternatively, you can create a `.env` file in the tests directory:
@@ -26,32 +26,45 @@ Alternatively, you can create a `.env` file in the tests directory:
 # .env file
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-POSTGRES_DB=drools_ha_test
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
+POSTGRES_DB=eda_ha_db
+POSTGRES_USER=eda_user
+POSTGRES_PASSWORD=eda_password
 ```
 
 ## Setting Up PostgreSQL
 
 ### Option 1: Docker Compose (Recommended)
 
-Create a `docker-compose.yml` file:
+The repository includes a `docker-compose.yaml` file with PostgreSQL configured. Simply run:
+
+```bash
+docker-compose up -d
+```
+
+The default configuration uses:
+- **Database**: eda_ha_db
+- **User**: eda_user
+- **Password**: eda_password
+- **Port**: 5432
+
+If you need to create your own `docker-compose.yml`:
 
 ```yaml
 version: '3.8'
 services:
   postgres:
-    image: postgres:14
+    image: postgres:15-alpine
+    container_name: eda-ha-postgres
     environment:
-      POSTGRES_DB: drools_ha_test
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: eda_ha_db
+      POSTGRES_USER: eda_user
+      POSTGRES_PASSWORD: eda_password
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U eda_user -d eda_ha_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -80,11 +93,16 @@ docker-compose down -v
 If you have PostgreSQL installed locally:
 
 ```bash
-# Create database
-createdb drools_ha_test
+# Create user
+createuser -P eda_user
+# (enter password: eda_password when prompted)
+
+# Create database owned by eda_user
+createdb -O eda_user eda_ha_db
 
 # Or using psql
-psql -U postgres -c "CREATE DATABASE drools_ha_test;"
+psql -U postgres -c "CREATE USER eda_user WITH PASSWORD 'eda_password';"
+psql -U postgres -c "CREATE DATABASE eda_ha_db OWNER eda_user;"
 ```
 
 ## Running HA Tests
@@ -122,13 +140,15 @@ python3.9 -m pytest tests/test_ha.py::test_multiple_action_infos -v
 To see both Python and Drools jar debug logs:
 
 ```bash
-DROOLS_JPY_JVM_LOG="defaultLogLevel=debug" python3.9 -m pytest tests/test_ha.py -s --log-cli-level=DEBUG
+python3.9 -m pytest tests/test_ha.py -s --log-cli-level=DEBUG
 ```
 
-### Run with Trace Logging (Most Verbose)
+### Choose Database
+
+At the moment, the test runs with H2 by default. To run with PostgreSQL, set the `DROOLS_HA_DB_TYPE` environment variable:
 
 ```bash
-DROOLS_JPY_JVM_LOG="defaultLogLevel=trace" python3.9 -m pytest tests/test_ha.py -s --log-cli-level=DEBUG
+DROOLS_HA_DB_TYPE=postgresql python3.9 -m pytest tests/test_ha.py -s --log-cli-level=DEBUG
 ```
 
 ## Test Coverage
@@ -217,12 +237,12 @@ Verify your environment variables match your PostgreSQL configuration.
 If you see:
 
 ```
-FATAL:  database "drools_ha_test" does not exist
+FATAL:  database "eda_ha_db" does not exist
 ```
 
 Create the database:
 ```bash
-docker-compose exec postgres createdb -U postgres drools_ha_test
+docker-compose exec postgres createdb -U eda_user eda_ha_db
 ```
 
 ### Java Exception: Table Does Not Exist
@@ -235,7 +255,7 @@ To clean up test data between runs:
 
 ```bash
 # Connect to database
-docker-compose exec postgres psql -U postgres -d drools_ha_test
+docker-compose exec postgres psql -U eda_user -d eda_ha_db
 
 # List tables
 \dt
@@ -245,8 +265,8 @@ DROP TABLE IF EXISTS action_info CASCADE;
 DROP TABLE IF EXISTS matching_events CASCADE;
 
 # Or drop and recreate the entire database
-docker-compose exec postgres psql -U postgres -c "DROP DATABASE drools_ha_test;"
-docker-compose exec postgres psql -U postgres -c "CREATE DATABASE drools_ha_test;"
+docker-compose exec postgres psql -U eda_user -c "DROP DATABASE eda_ha_db;"
+docker-compose exec postgres psql -U eda_user -c "CREATE DATABASE eda_ha_db;"
 ```
 
 ## CI/CD Integration
@@ -264,11 +284,11 @@ jobs:
 
     services:
       postgres:
-        image: postgres:14
+        image: postgres:15-alpine
         env:
-          POSTGRES_DB: drools_ha_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: eda_ha_db
+          POSTGRES_USER: eda_user
+          POSTGRES_PASSWORD: eda_password
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -295,9 +315,9 @@ jobs:
         env:
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5432
-          POSTGRES_DB: drools_ha_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: eda_ha_db
+          POSTGRES_USER: eda_user
+          POSTGRES_PASSWORD: eda_password
         run: |
           pytest tests/test_ha.py -v
 ```

@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 import yaml
 
-from drools.dispatch import establish_async_channel, handle_async_messages
+from drools.dispatch import establish_async_channel, handle_async_messages, Dispatch
 from drools.rule import Rule
 from drools.ruleset import (
     Ruleset,
@@ -36,9 +36,9 @@ def postgres_params():
     return {
         "host": os.environ.get("POSTGRES_HOST", "localhost"),
         "port": int(os.environ.get("POSTGRES_PORT", "5432")),
-        "database": os.environ.get("POSTGRES_DB", "drools_ha_test"),
-        "user": os.environ.get("POSTGRES_USER", "postgres"),
-        "password": os.environ.get("POSTGRES_PASSWORD", "postgres"),
+        "database": os.environ.get("POSTGRES_DB", "eda_ha_db"),
+        "user": os.environ.get("POSTGRES_USER", "eda_user"),
+        "password": os.environ.get("POSTGRES_PASSWORD", "eda_password"),
     }
 
 
@@ -115,7 +115,7 @@ async def test_ha_initialization_and_leader_lifecycle(postgres_params, ha_config
 
         # Test ActionInfo operations if matching_uuid is available
         if matching_uuid:
-            action_data = json.dumps({"action": "print_event", "status": "pending"})
+            action_data = json.dumps({"action": "print_event", "status": "1"})
 
             # Test adding action info
             add_action_info(ruleset_data["name"], matching_uuid, 0, action_data)
@@ -200,7 +200,7 @@ async def test_action_info_lifecycle(postgres_params):
 
         # Test ActionInfo operations
         action_index = 0
-        action_data = json.dumps({"action": "print_event", "status": "pending"})
+        action_data = json.dumps({"action": "print_event", "status": "1"})
 
         # 1. Check action doesn't exist initially
         assert not action_info_exists(ruleset_data["name"], matching_uuid, action_index)
@@ -403,7 +403,7 @@ async def test_ha_failover_scenario(postgres_params):
 
         # Leader 1 creates action info
         add_action_info(ruleset_data["name"], matching_uuid, 0,
-                       json.dumps({"action": "test", "status": "pending"}))
+                       json.dumps({"action": "test", "status": "1"}))
         print("Leader 1 added action info")
 
         # Leader 1 goes down

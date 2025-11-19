@@ -305,23 +305,23 @@ class RulesetCollection:
         cls.engine = None
 
     @classmethod
-    def initialize_ha(cls, uuid: str, postgres_params: dict, config: dict = None):
+    def initialize_ha(cls, uuid: str, worker_name: str, postgres_params: dict, config: dict = None):
         """Initialize HA mode with UUID and database configuration"""
         cls.create_engine()
         postgres_params_json = json.dumps(postgres_params)
         config_json = json.dumps(config) if config else json.dumps({})
-        cls.engine.initializeHA(uuid, postgres_params_json, config_json)
+        cls.engine.initializeHA(uuid, worker_name, postgres_params_json, config_json)
 
     @classmethod
-    def enable_leader(cls, leader_name: str):
+    def enable_leader(cls):
         """Enable leader mode and start writing states to database"""
         cls.create_engine()
-        cls.engine.enableLeader(leader_name)
+        cls.engine.enableLeader()
 
     @classmethod
-    def disable_leader(cls, leader_name: str):
+    def disable_leader(cls):
         """Disable leader mode and stop writing to database"""
-        cls.engine.disableLeader(leader_name)
+        cls.engine.disableLeader()
 
     @classmethod
     def get_ha_stats(cls) -> Dict:
@@ -429,12 +429,13 @@ def advance_time(ruleset_name: str, amount: int, units: str):
 
 
 # Module-level HA functions
-def initialize_ha(uuid: str, postgres_params: dict, config: dict = None):
+def initialize_ha(uuid: str, worker_name: str, postgres_params: dict, config: dict = None):
     """
     Initialize HA mode with UUID and database configuration
 
     Args:
-        uuid: Unique identifier for this instance
+        uuid: Unique identifier for this HA cluster
+        worker_name: Name of the worker node
         postgres_params: Database connection parameters
             - host: Database host
             - port: Database port
@@ -443,17 +444,17 @@ def initialize_ha(uuid: str, postgres_params: dict, config: dict = None):
             - password: Database password
         config: Optional HA configuration parameters
     """
-    return RulesetCollection.initialize_ha(uuid, postgres_params, config)
+    return RulesetCollection.initialize_ha(uuid, worker_name, postgres_params, config)
 
 
-def enable_leader(leader_name: str):
+def enable_leader():
     """Enable leader mode and start writing states to database"""
-    return RulesetCollection.enable_leader(leader_name)
+    return RulesetCollection.enable_leader()
 
 
-def disable_leader(leader_name: str):
+def disable_leader():
     """Disable leader mode and stop writing to database"""
-    return RulesetCollection.disable_leader(leader_name)
+    return RulesetCollection.disable_leader()
 
 
 def get_ha_stats() -> Dict:

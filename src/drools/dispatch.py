@@ -21,9 +21,15 @@ class Dispatch:
 
 async def establish_async_channel():
     logger.debug("Establishing async channel")
-    return await asyncio.open_connection(
-        "localhost", RulesetCollection.response_port()
-    )
+    port = RulesetCollection.response_port()
+    try:
+        logger.debug("+++ open_connection start : %s", port)
+        reader, writer = await asyncio.open_connection("localhost", port)
+        logger.debug("+++ open_connection done")
+        return reader, writer
+    except OSError as e:
+        logger.error("Async channel connect failed to localhost:%s: %s", port, e)
+        raise
 
 
 async def handle_async_messages(reader, writer):

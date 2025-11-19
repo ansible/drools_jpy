@@ -63,7 +63,7 @@ async def test_ha_initialization_and_leader_lifecycle(postgres_params, ha_config
     try:
         # 1. Initialize HA with a unique UUID
         instance_uuid = str(uuid.uuid4())
-        initialize_ha(instance_uuid, postgres_params, ha_config)
+        initialize_ha(instance_uuid, "worker-1", postgres_params, ha_config)
 
         # 2. Create a ruleset
         test_data = load_ast("asts/rules_with_assignment.yml")
@@ -86,7 +86,7 @@ async def test_ha_initialization_and_leader_lifecycle(postgres_params, ha_config
 
         # 3. Enable leader mode
         leader_name = "test-leader-1"
-        enable_leader(leader_name)
+        enable_leader()
 
         # Verify HA stats after enabling leader
         ha_stats = get_ha_stats()
@@ -132,7 +132,7 @@ async def test_ha_initialization_and_leader_lifecycle(postgres_params, ha_config
             delete_action_info(ruleset_data["name"], matching_uuid)
 
         # 6. Disable leader mode
-        disable_leader(leader_name)
+        disable_leader()
 
         # 7. Clean up
         rs.end_session()
@@ -157,7 +157,7 @@ async def test_action_info_lifecycle(postgres_params):
     try:
         # Initialize HA
         instance_uuid = str(uuid.uuid4())
-        initialize_ha(instance_uuid, postgres_params, {})
+        initialize_ha(instance_uuid, "worker-1", postgres_params, {})
 
         # Create a ruleset
         test_data = load_ast("asts/rules_with_assignment.yml")
@@ -178,7 +178,7 @@ async def test_action_info_lifecycle(postgres_params):
         rs.add_rule(Rule("assignment", my_callback))
 
         # Enable leader
-        enable_leader("action-test-leader")
+        enable_leader()
 
         # Assert an event to generate a match with matching_uuid
         rs.assert_event(json.dumps(dict(i=67)))
@@ -227,7 +227,7 @@ async def test_action_info_lifecycle(postgres_params):
         assert not action_info_exists(ruleset_data["name"], matching_uuid, action_index)
 
         # Clean up
-        disable_leader("action-test-leader")
+        disable_leader()
         rs.end_session()
     finally:
         if not async_task.done():
@@ -248,7 +248,7 @@ async def test_ha_stats(postgres_params):
 
     try:
         instance_uuid = str(uuid.uuid4())
-        initialize_ha(instance_uuid, postgres_params, {})
+        initialize_ha(instance_uuid, "worker-1", postgres_params, {})
 
         # Get stats before enabling leader
         stats_before = get_ha_stats()
@@ -256,7 +256,7 @@ async def test_ha_stats(postgres_params):
         assert isinstance(stats_before, dict)
 
         # Enable leader
-        enable_leader("stats-test-leader")
+        enable_leader()
 
         # Get stats after enabling leader
         stats_after = get_ha_stats()
@@ -264,7 +264,7 @@ async def test_ha_stats(postgres_params):
         assert isinstance(stats_after, dict)
 
         # Clean up
-        disable_leader("stats-test-leader")
+        disable_leader()
     finally:
         async_task.cancel()
         try:
@@ -283,7 +283,7 @@ async def test_multiple_action_infos(postgres_params):
 
     try:
         instance_uuid = str(uuid.uuid4())
-        initialize_ha(instance_uuid, postgres_params, {})
+        initialize_ha(instance_uuid, "worker-1", postgres_params, {})
 
         test_data = load_ast("asts/rules_with_assignment.yml")
         ruleset_data = test_data[0]["RuleSet"]
@@ -302,7 +302,7 @@ async def test_multiple_action_infos(postgres_params):
         )
         rs.add_rule(Rule("assignment", my_callback))
 
-        enable_leader("multi-action-leader")
+        enable_leader()
 
         # Assert an event to generate a match with matching_uuid
         rs.assert_event(json.dumps(dict(i=67)))
@@ -341,7 +341,7 @@ async def test_multiple_action_infos(postgres_params):
         for i in range(3):
             assert not action_info_exists(ruleset_data["name"], matching_uuid, i)
 
-        disable_leader("multi-action-leader")
+        disable_leader()
         rs.end_session()
     finally:
         if not async_task.done():
@@ -366,7 +366,7 @@ async def test_ha_failover_scenario(postgres_params):
     async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
 
     try:
-        initialize_ha(ha_uuid, postgres_params, {})
+        initialize_ha(ha_uuid, "worker-1", postgres_params, {})
 
         test_data = load_ast("asts/rules_with_assignment.yml")
         ruleset_data = test_data[0]["RuleSet"]
@@ -385,8 +385,8 @@ async def test_ha_failover_scenario(postgres_params):
         )
         rs1.add_rule(Rule("assignment", my_callback1))
 
-        enable_leader("leader-1")
-        print("Leader 1 enabled")
+        enable_leader()
+        print("worker-1 became a Leader")
 
         # Leader 1 asserts an event to get a real matching_uuid
         rs1.assert_event(json.dumps(dict(i=67)))
@@ -405,12 +405,12 @@ async def test_ha_failover_scenario(postgres_params):
         # Leader 1 creates action info
         add_action_info(ruleset_data["name"], matching_uuid, 0,
                        json.dumps({"action": "test", "status": "1"}))
-        print("Leader 1 added action info")
+        print("Leader worker-1 added action info")
 
         # Leader 1 goes down
-        disable_leader("leader-1")
+        disable_leader()
         rs1.end_session()
-        print("Leader 1 disabled and session ended")
+        print("Leader worker-1 disabled and session ended")
     finally:
         if not async_task1.done():
             async_task1.cancel()
@@ -432,7 +432,7 @@ async def test_ha_failover_scenario(postgres_params):
 
     try:
         # Use the same ha_uuid to represent the same HA cluster
-        initialize_ha(ha_uuid, postgres_params, {})
+        initialize_ha(ha_uuid, "worker-2", postgres_params, {})
 
         rs2 = Ruleset(
             name=ruleset_data["name"],
@@ -445,8 +445,8 @@ async def test_ha_failover_scenario(postgres_params):
         print("Yielding to async handler before enabling leader...")
         await asyncio.sleep(0.1)
 
-        enable_leader("leader-2")
-        print("Leader 2 enabled")
+        enable_leader()
+        print("worker-2 became a Leader")
 
         # Wait for potential recovery message
         print("Waiting for recovery message...")
@@ -454,13 +454,13 @@ async def test_ha_failover_scenario(postgres_params):
 
         # Leader 2 should be able to read the action info created by Leader 1
         assert action_info_exists(ruleset_data["name"], matching_uuid, 0)
-        print("Leader 2 successfully read action info from Leader 1")
+        print("Leader worker-2 successfully read action info from worker-1")
 
         # Clean up
         delete_action_info(ruleset_data["name"], matching_uuid)
-        disable_leader("leader-2")
+        disable_leader()
         rs2.end_session()
-        print("Leader 2 cleaned up")
+        print("Leader worker-2 cleaned up")
     finally:
         if not async_task2.done():
             async_task2.cancel()

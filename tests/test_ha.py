@@ -352,7 +352,6 @@ async def test_multiple_action_infos(postgres_params):
                 pass
 
 
-#This test works even with H2 database
 @pytest.mark.asyncio
 async def test_ha_failover_scenario(postgres_params):
     """Test HA failover scenario with leader switch"""
@@ -407,6 +406,9 @@ async def test_ha_failover_scenario(postgres_params):
                        json.dumps({"action": "test", "status": "1"}))
         print("Leader worker-1 added action info")
 
+        stats_before_failover = get_ha_stats()
+        print(f"HA Stats before failover: {stats_before_failover}")
+
         # Leader 1 goes down
         disable_leader()
         rs1.end_session()
@@ -455,6 +457,9 @@ async def test_ha_failover_scenario(postgres_params):
         # Leader 2 should be able to read the action info created by Leader 1
         assert action_info_exists(ruleset_data["name"], matching_uuid, 0)
         print("Leader worker-2 successfully read action info from worker-1")
+
+        stats_after_failover = get_ha_stats()
+        print(f"HA Stats after failover: {stats_after_failover}")
 
         # Clean up
         delete_action_info(ruleset_data["name"], matching_uuid)

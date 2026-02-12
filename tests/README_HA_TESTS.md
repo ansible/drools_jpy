@@ -62,11 +62,21 @@ python3.9 -m pytest tests/test_ha.py -v
 
 ### Run All HA Tests with PostgreSQL database
 
-At the moment, the test runs with H2 by default. To run with PostgreSQL, set the `DROOLS_HA_DB_TYPE` environment variable:
+The test runs with PostgreSQL by default. If you use the docker-compose setup, just run:
 
 ```bash
-DROOLS_HA_DB_TYPE=postgresql python3.9 -m pytest tests/test_ha.py -v
+python3.9 -m pytest tests/test_ha.py -v
 ```
+
+### Run All HA Tests with H2 database
+
+To run tests with H2 database instead of PostgreSQL, set the following environment variable:
+
+```bash
+DROOLS_HA_DB_TYPE=h2 DROOLS_HA_H2_FILE=./eda_ha python3.9 -m pytest tests/test_ha.py -v
+````
+
+After the tests, you may delete the `./eda_ha.mv.db` file if desired.
 
 ### Run Specific Test
 

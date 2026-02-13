@@ -32,7 +32,7 @@ def load_ast(filename: str) -> dict:
 
 
 @pytest.fixture
-def postgres_params():
+def db_params():
     """PostgreSQL connection parameters for testing"""
     return {
         "host": os.environ.get("POSTGRES_HOST", "localhost"),
@@ -53,7 +53,7 @@ def ha_config():
 
 
 @pytest.mark.asyncio
-async def test_ha_initialization_and_leader_lifecycle(postgres_params, ha_config):
+async def test_ha_initialization_and_leader_lifecycle(db_params, ha_config):
     """Test HA initialization, createRuleset, enableLeader, and assertEvent"""
 
     # Establish async channel for HA communication
@@ -63,7 +63,7 @@ async def test_ha_initialization_and_leader_lifecycle(postgres_params, ha_config
     try:
         # 1. Initialize HA with a unique UUID
         instance_uuid = str(uuid.uuid4())
-        initialize_ha(instance_uuid, "worker-1", postgres_params, ha_config)
+        initialize_ha(instance_uuid, "worker-1", db_params, ha_config)
 
         # 2. Create a ruleset
         test_data = load_ast("asts/rules_with_assignment.yml")
@@ -147,7 +147,7 @@ async def test_ha_initialization_and_leader_lifecycle(postgres_params, ha_config
 
 
 @pytest.mark.asyncio
-async def test_action_info_lifecycle(postgres_params):
+async def test_action_info_lifecycle(db_params):
     """Test ActionInfo CRUD operations"""
 
     # Establish async channel for HA communication
@@ -157,7 +157,7 @@ async def test_action_info_lifecycle(postgres_params):
     try:
         # Initialize HA
         instance_uuid = str(uuid.uuid4())
-        initialize_ha(instance_uuid, "worker-1", postgres_params, {})
+        initialize_ha(instance_uuid, "worker-1", db_params, {})
 
         # Create a ruleset
         test_data = load_ast("asts/rules_with_assignment.yml")
@@ -239,7 +239,7 @@ async def test_action_info_lifecycle(postgres_params):
 
 
 @pytest.mark.asyncio
-async def test_ha_stats(postgres_params):
+async def test_ha_stats(db_params):
     """Test getting HA statistics"""
 
     # Establish async channel for HA communication
@@ -248,7 +248,7 @@ async def test_ha_stats(postgres_params):
 
     try:
         instance_uuid = str(uuid.uuid4())
-        initialize_ha(instance_uuid, "worker-1", postgres_params, {})
+        initialize_ha(instance_uuid, "worker-1", db_params, {})
 
         # Get stats before enabling leader
         stats_before = get_ha_stats()
@@ -274,7 +274,7 @@ async def test_ha_stats(postgres_params):
 
 
 @pytest.mark.asyncio
-async def test_multiple_action_infos(postgres_params):
+async def test_multiple_action_infos(db_params):
     """Test managing multiple actions for the same matching event"""
 
     # Establish async channel for HA communication
@@ -283,7 +283,7 @@ async def test_multiple_action_infos(postgres_params):
 
     try:
         instance_uuid = str(uuid.uuid4())
-        initialize_ha(instance_uuid, "worker-1", postgres_params, {})
+        initialize_ha(instance_uuid, "worker-1", db_params, {})
 
         test_data = load_ast("asts/rules_with_assignment.yml")
         ruleset_data = test_data[0]["RuleSet"]
@@ -353,7 +353,7 @@ async def test_multiple_action_infos(postgres_params):
 
 
 @pytest.mark.asyncio
-async def test_ha_failover_scenario(postgres_params):
+async def test_ha_failover_scenario(db_params):
     """Test HA failover scenario with leader switch"""
 
     # Use the same HA UUID for both instances (they're part of the same HA cluster)
@@ -365,7 +365,7 @@ async def test_ha_failover_scenario(postgres_params):
     async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
 
     try:
-        initialize_ha(ha_uuid, "worker-1", postgres_params, {})
+        initialize_ha(ha_uuid, "worker-1", db_params, {})
 
         test_data = load_ast("asts/rules_with_assignment.yml")
         ruleset_data = test_data[0]["RuleSet"]
@@ -434,7 +434,7 @@ async def test_ha_failover_scenario(postgres_params):
 
     try:
         # Use the same ha_uuid to represent the same HA cluster
-        initialize_ha(ha_uuid, "worker-2", postgres_params, {})
+        initialize_ha(ha_uuid, "worker-2", db_params, {})
 
         rs2 = Ruleset(
             name=ruleset_data["name"],

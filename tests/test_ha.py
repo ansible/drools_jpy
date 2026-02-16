@@ -17,6 +17,7 @@ from drools.ruleset import (
     disable_leader,
     get_ha_stats,
     add_action_info,
+    update_action_info,
     get_action_info,
     get_action_status,
     action_info_exists,
@@ -589,6 +590,173 @@ async def test_ha_failover_with_partial_match(db_params):
         # Clean up while engine is still alive
         if matching_uuid:
             delete_action_info(ruleset_data["name"], matching_uuid)
+        disable_leader()
+        rs2.end_session()
+        print("worker-2 cleaned up")
+    finally:
+        if not async_task2.done():
+            async_task2.cancel()
+            try:
+                await async_task2
+            except asyncio.CancelledError:
+                pass
+
+
+@pytest.mark.asyncio
+async def test_ha_failover_with_multiple_actions(db_params):
+    """Test HA failover with multiple action infos across workers.
+
+    Uses test_multiple_actions_ast.yml which has a rule with 3 actions.
+    Worker-1 fires the rule, adds 3 action infos (status=1), updates one
+    to status=3, then goes down. Worker-2 takes over via failover, receives
+    MatchingEvent recovery, updates the remaining 2 action infos to status=3,
+    then deletes all action info for the matching event.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    test_data = load_ast("asts/test_multiple_actions_ast.yml")
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "r1"
+
+    # --- Worker 1: fire rule, add action infos, update one, then go down ---
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
+
+    try:
+        initialize_ha(ha_uuid, "worker-1", db_params, {})
+
+        captured_matches = []
+        def capture_callback(matches):
+            captured_matches.append(matches)
+
+        my_callback1 = mock.Mock(side_effect=capture_callback)
+        rs1 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True
+        )
+        rs1.add_rule(Rule(rule_name, my_callback1))
+
+        enable_leader()
+        print("worker-1 became a Leader")
+
+        # 1. Send event to fire the rule (i==1)
+        rs1.assert_event(json.dumps(dict(i=1)))
+        print("worker-1 sent event {i: 1}")
+
+        # Verify the rule fired
+        assert my_callback1.called, "Rule should fire when i==1"
+        assert len(captured_matches) > 0
+
+        # 2. Extract matching_uuid
+        matching_uuid = captured_matches[0].matching_uuid
+        assert matching_uuid is not None, "matching_uuid should be present in HA mode"
+        print(f"worker-1 received match, matching_uuid: {matching_uuid}")
+
+        # 3. Add 3 action infos with status=1
+        for i in range(3):
+            action_data = json.dumps({"action": f"action_{i}", "status": "1"})
+            add_action_info(ruleset_data["name"], matching_uuid, i, action_data)
+        print("worker-1 added 3 action infos with status=1")
+
+        # Verify all 3 action infos exist
+        for i in range(3):
+            assert action_info_exists(ruleset_data["name"], matching_uuid, i)
+
+        # 4. Update action 0 to status=3 (simulating action completed)
+        update_action_info(
+            ruleset_data["name"], matching_uuid, 0,
+            json.dumps({"action": "action_0", "status": "3"})
+        )
+        print("worker-1 updated action 0 to status=3")
+
+        # Verify action 0 is updated
+        action_0 = json.loads(get_action_info(ruleset_data["name"], matching_uuid, 0))
+        assert action_0["status"] == "3"
+
+        # 5. Worker 1 goes down
+        disable_leader()
+        rs1.end_session()
+        print("worker-1 disabled and session ended")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    # Shutdown RulesetCollection to simulate worker-1 JVM going down.
+    if RulesetCollection.engine is not None:
+        print("Shutting down RulesetCollection (simulating worker-1 shutdown)")
+        shutdown()
+    print("RulesetCollection shut down")
+
+    # --- Worker 2: takes over, receives recovery, updates remaining actions ---
+    reader2, writer2 = await establish_async_channel()
+    async_task2 = asyncio.create_task(handle_async_messages(reader2, writer2))
+
+    try:
+        initialize_ha(ha_uuid, "worker-2", db_params, {})
+
+        my_callback2 = mock.Mock()
+        rs2 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True
+        )
+        rs2.add_rule(Rule(rule_name, my_callback2))
+
+        # Yield to ensure async handler starts reading before enableLeader
+        await asyncio.sleep(0.1)
+
+        enable_leader()
+        print("worker-2 became a Leader")
+
+        # 6. Wait for MatchingEvent recovery
+        print("Waiting for recovery...")
+        await asyncio.sleep(0.5)
+
+        # 7. Verify all 3 action infos from worker-1 are still available
+        for i in range(3):
+            assert action_info_exists(ruleset_data["name"], matching_uuid, i), \
+                f"action {i} should survive failover"
+        print("worker-2 verified all 3 action infos survived failover")
+
+        # Verify action 0 still has status=3 from worker-1's update
+        action_0 = json.loads(get_action_info(ruleset_data["name"], matching_uuid, 0))
+        assert action_0["status"] == "3", "action 0 status should be 3 from worker-1"
+
+        # Verify actions 1 and 2 still have status=1
+        for i in [1, 2]:
+            action_i = json.loads(get_action_info(ruleset_data["name"], matching_uuid, i))
+            assert action_i["status"] == "1", f"action {i} status should still be 1"
+
+        # 8. Update remaining actions (1, 2) to status=3
+        for i in [1, 2]:
+            update_action_info(
+                ruleset_data["name"], matching_uuid, i,
+                json.dumps({"action": f"action_{i}", "status": "3"})
+            )
+        print("worker-2 updated actions 1 and 2 to status=3")
+
+        # Verify all actions now have status=3
+        for i in range(3):
+            action_i = json.loads(get_action_info(ruleset_data["name"], matching_uuid, i))
+            assert action_i["status"] == "3", f"action {i} should have status=3"
+
+        # 9. Delete all action info for the matching event
+        delete_action_info(ruleset_data["name"], matching_uuid)
+        print("worker-2 deleted all action info")
+
+        # Verify all actions are gone
+        for i in range(3):
+            assert not action_info_exists(ruleset_data["name"], matching_uuid, i), \
+                f"action {i} should be deleted"
+
+        # 10. Cleanup worker-2
         disable_leader()
         rs2.end_session()
         print("worker-2 cleaned up")

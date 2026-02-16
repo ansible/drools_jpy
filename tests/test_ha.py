@@ -11,6 +11,7 @@ from drools.dispatch import establish_async_channel, handle_async_messages, Disp
 from drools.rule import Rule
 from drools.ruleset import (
     Ruleset,
+    RulesetCollection,
     initialize_ha,
     enable_leader,
     disable_leader,
@@ -466,6 +467,131 @@ async def test_ha_failover_scenario(db_params):
         disable_leader()
         rs2.end_session()
         print("Leader worker-2 cleaned up")
+    finally:
+        if not async_task2.done():
+            async_task2.cancel()
+            try:
+                await async_task2
+            except asyncio.CancelledError:
+                pass
+
+
+@pytest.mark.asyncio
+async def test_ha_failover_with_partial_match(db_params):
+    """Test HA failover where worker-1 sends a partial match and worker-2 completes it.
+
+    Uses rules_with_multiple_conditions_all_assignment.yml which has an AllCondition
+    requiring two events: first (i==0) and second (i==1). Worker-1 sends only the
+    first event, then goes down. Worker-2 takes over and sends the second event,
+    which should fire the rule thanks to HA state recovery.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    test_data = load_ast("asts/rules_with_multiple_conditions_all_assignment.yml")
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "multiple conditions"
+
+    # --- Worker 1: send partial match (first condition only) ---
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
+
+    try:
+        initialize_ha(ha_uuid, "worker-1", db_params, {})
+
+        my_callback1 = mock.Mock()
+        rs1 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True
+        )
+        rs1.add_rule(Rule(rule_name, my_callback1))
+
+        enable_leader()
+        print("worker-1 became a Leader")
+
+        # Send first event (i==0) — matches only the first condition, rule should NOT fire
+        rs1.assert_event(json.dumps(dict(i=0)))
+        print("worker-1 sent event {i: 0} (partial match)")
+
+        # Give some time for async processing
+        await asyncio.sleep(0.5)
+
+        # Rule should not have fired (only one of two conditions met)
+        assert not my_callback1.called, "Rule should not fire with only one condition matched"
+        print("Confirmed: rule did not fire on worker-1 (partial match)")
+
+        # Worker 1 goes down
+        disable_leader()
+        rs1.end_session()
+        print("worker-1 disabled and session ended")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    # Shutdown RulesetCollection to simulate worker-1 JVM going down.
+    # Note: handle_async_messages may have already called shutdown() via its
+    # CancelledError handler when async_task1 was cancelled in the finally block.
+    if RulesetCollection.engine is not None:
+        print("Shutting down RulesetCollection (simulating worker-1 shutdown)")
+        shutdown()
+    print("RulesetCollection shut down")
+
+    # --- Worker 2: takes over and completes the match ---
+    reader2, writer2 = await establish_async_channel()
+    async_task2 = asyncio.create_task(handle_async_messages(reader2, writer2))
+
+    try:
+        initialize_ha(ha_uuid, "worker-2", db_params, {})
+
+        captured_matches = []
+        def capture_callback(matches):
+            captured_matches.append(matches)
+
+        my_callback2 = mock.Mock(side_effect=capture_callback)
+        rs2 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True
+        )
+        rs2.add_rule(Rule(rule_name, my_callback2))
+
+        # Yield to ensure async handler starts reading before enableLeader
+        await asyncio.sleep(0.1)
+
+        enable_leader()
+        print("worker-2 became a Leader")
+
+        # Wait for recovery of the partial match from worker-1
+        print("Waiting for recovery...")
+        await asyncio.sleep(0.5)
+
+        # Send second event (i==1) — completes the AllCondition, rule should fire
+        # The rule fires synchronously via _process_response, no need to await async task
+        rs2.assert_event(json.dumps(dict(i=1)))
+        print("worker-2 sent event {i: 1} (completing the match)")
+
+        # Verify the rule fired on worker-2
+        assert my_callback2.called, "Rule should fire after both conditions are met"
+        assert len(captured_matches) > 0
+        matching_uuid = captured_matches[0].matching_uuid
+        print(f"Rule fired on worker-2! matching_uuid: {matching_uuid}")
+
+        # Verify match data contains both events
+        match_data = captured_matches[0].data
+        print(f"Match data: {match_data}")
+
+        # Clean up while engine is still alive
+        if matching_uuid:
+            delete_action_info(ruleset_data["name"], matching_uuid)
+        disable_leader()
+        rs2.end_session()
+        print("worker-2 cleaned up")
     finally:
         if not async_task2.done():
             async_task2.cancel()

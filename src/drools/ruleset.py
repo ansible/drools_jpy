@@ -247,7 +247,6 @@ class Ruleset:
                     + str(self._session_id)
                     + (f" with matching_uuid: {matching_uuid}" if matching_uuid else "")
                 )
-                return
 
             if rule_name in self._rules:
                 logger.debug(

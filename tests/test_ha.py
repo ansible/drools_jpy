@@ -35,8 +35,10 @@ def load_ast(filename: str) -> dict:
 
 @pytest.fixture
 def db_params():
-    """PostgreSQL connection parameters for testing"""
+    """DB connection parameters for testing"""
     return {
+        "db_type": os.environ.get("DROOLS_HA_DB_TYPE", "postgres"), # "h2" or "postgres"
+        "db_file_path": os.environ.get("DROOLS_HA_H2_FILE", "./eda_ha"), # Only used for H2, ignored for PostgreSQL
         "host": os.environ.get("POSTGRES_HOST", "localhost"),
         "port": int(os.environ.get("POSTGRES_PORT", "5432")),
         "database": os.environ.get("POSTGRES_DB", "eda_ha_db"),
@@ -49,8 +51,7 @@ def db_params():
 def ha_config():
     """HA configuration parameters"""
     return {
-        "syncInterval": 1000,  # milliseconds
-        "stateCheckInterval": 500,  # milliseconds
+        "write_after": 1,  # not yet implemented
     }
 
 
@@ -251,6 +252,24 @@ async def test_ha_stats(db_params):
     try:
         instance_uuid = str(uuid.uuid4())
         initialize_ha(instance_uuid, "worker-1", db_params, {})
+
+        # Create a ruleset
+        test_data = load_ast("asts/rules_with_assignment.yml")
+        ruleset_data = test_data[0]["RuleSet"]
+
+        # Capture the actual match data to get matching_uuid
+        captured_matches = []
+        def capture_callback(matches):
+            captured_matches.append(matches)
+            async_task.cancel()
+
+        my_callback = mock.Mock(side_effect=capture_callback)
+        rs = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True
+        )
+        rs.add_rule(Rule("assignment", my_callback))
 
         # Get stats before enabling leader
         stats_before = get_ha_stats()

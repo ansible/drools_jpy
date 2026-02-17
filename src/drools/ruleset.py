@@ -3,6 +3,7 @@ import glob
 import json
 import logging
 import os
+import tempfile
 from dataclasses import dataclass, field
 from typing import ClassVar, Dict, List
 
@@ -90,6 +91,9 @@ def _make_jpy_instance():
     ]  # add prefix
 
     jvm_options.extend(jvm_log_options)
+
+    tmp_dir = tempfile.gettempdir()
+    jvm_options.append(f"-Djava.io.tmpdir={tmp_dir}")
 
     jpyutil.init_jvm(
         jvm_maxmem=max_mem,

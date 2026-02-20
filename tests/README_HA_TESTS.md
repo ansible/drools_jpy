@@ -131,6 +131,73 @@ The test suite includes:
    - Tests failover scenario where one leader goes down and another takes over
    - Consumes pending matching event info after failover via async channel
 
+## HA SSL Tests (PostgreSQL with SSL/mTLS)
+
+The `test_ha_ssl.py` tests verify HA functionality over an SSL-encrypted PostgreSQL connection with mutual TLS (client certificate authentication).
+
+### Setup
+
+#### 1. Generate SSL certificates
+
+```bash
+tests/ssl-certs/generate-certs.sh
+```
+
+This creates the following files under `tests/ssl-certs/`:
+
+| File | Description |
+|---|---|
+| `ca.crt` / `ca.key` | Self-signed CA |
+| `server.crt` / `server.key` | Server certificate (CN=localhost, SAN=localhost+127.0.0.1) |
+| `client.crt` / `client.key` | Client certificate (CN=eda_user, encrypted PKCS#8 PEM) |
+
+The client key passphrase is `testpassphrase`. The client certificate CN (`eda_user`) must match the PostgreSQL username for `cert` authentication.
+
+#### 2. Start SSL PostgreSQL (port 5433)
+
+```bash
+docker-compose -f docker-compose-ssl.yaml up -d
+```
+
+This runs on port **5433** to avoid conflict with the non-SSL instance on 5432. The container is configured with:
+- SSL enabled with server certificates
+- `pg_hba.conf`: `hostssl` with `cert` auth for `eda_user` (requires client certificate)
+
+> **Note:** The init script only runs on first startup. If you need to re-initialize, tear down with `-v` first (see below).
+
+#### 3. Run SSL tests
+
+```bash
+pytest tests/test_ha_ssl.py -v
+```
+
+No environment variables needed — defaults point to `tests/ssl-certs/` and port 5433.
+
+#### Tear down
+
+```bash
+docker-compose -f docker-compose-ssl.yaml down -v
+```
+
+The `-v` flag removes the data volume so the init script re-runs on next `up`.
+
+### SSL Environment Variables
+
+All have sensible defaults for the docker-compose-ssl setup. Override if connecting to a different SSL PostgreSQL instance:
+
+| Variable | Default |
+|---|---|
+| `POSTGRES_HOST` | `localhost` |
+| `POSTGRES_PORT` | `5433` |
+| `POSTGRES_DB` | `eda_ha_db` |
+| `POSTGRES_USER` | `eda_user` |
+| `POSTGRES_PASSWORD` | `eda_password` |
+| `POSTGRES_SSLMODE` | `verify-full` |
+| `POSTGRES_SSLROOTCERT` | `tests/ssl-certs/ca.crt` |
+| `POSTGRES_SSLCERT` | `tests/ssl-certs/client.crt` |
+| `POSTGRES_SSLKEY` | `tests/ssl-certs/client.key` |
+| `POSTGRES_SSLPASSWORD` | `testpassphrase` |
+
 ### Backward Compatibility
 
 The `_dispatch` method in `Ruleset` handles both:

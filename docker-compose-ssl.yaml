@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  postgres-ssl:
+    image: postgres:15-alpine
+    container_name: eda-ha-postgres-ssl
+    environment:
+      POSTGRES_DB: eda_ha_db
+      POSTGRES_USER: eda_user
+      POSTGRES_PASSWORD: eda_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_ssl_data:/var/lib/postgresql/data
+      - ./tests/ssl-certs/ca.crt:/tmp/ssl/ca.crt:ro,z
+      - ./tests/ssl-certs/server.crt:/tmp/ssl/server.crt:ro,z
+      - ./tests/ssl-certs/server.key:/tmp/ssl/server.key:ro,z
+      - ./tests/ssl-certs/pg-ssl-init.sh:/docker-entrypoint-initdb.d/00-ssl-setup.sh:z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eda_user -d eda_ha_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - eda-ha-ssl-network
+
+volumes:
+  postgres_ssl_data:
+    driver: local
+
+networks:
+  eda-ha-ssl-network:
+    driver: bridge

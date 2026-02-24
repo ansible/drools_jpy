@@ -37,7 +37,7 @@ def load_ast(filename: str) -> dict:
 def db_params():
     """DB connection parameters for testing"""
     return {
-        "db_type": os.environ.get("DROOLS_HA_DB_TYPE", "postgres"), # "h2" or "postgres"
+        "db_type": os.environ.get("DROOLS_HA_DB_TYPE", "h2"), # "h2" or "postgres"
         "db_file_path": os.environ.get("DROOLS_HA_H2_FILE", "./eda_ha"), # Only used for H2, ignored for PostgreSQL
         "host": os.environ.get("POSTGRES_HOST", "localhost"),
         "port": int(os.environ.get("POSTGRES_PORT", "5432")),

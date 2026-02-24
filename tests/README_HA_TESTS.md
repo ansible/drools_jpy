@@ -54,29 +54,24 @@ docker-compose down -v
 source venv/bin/activate
 ```
 
-### Run All HA Tests with H2 database
+### Run All HA Tests with H2 database (default)
+
+The test runs with H2 file-backed database by default. No external database needed:
 
 ```bash
 python3.9 -m pytest tests/test_ha.py -v
 ```
+
+After the tests, you may delete the `./eda_ha.mv.db` file if desired.
 
 ### Run All HA Tests with PostgreSQL database
 
-The test runs with PostgreSQL by default. If you use the docker-compose setup, just run:
+To run tests with PostgreSQL instead of H2, start the database and set the environment variable:
 
 ```bash
-python3.9 -m pytest tests/test_ha.py -v
+docker-compose up -d
+DROOLS_HA_DB_TYPE=postgres python3.9 -m pytest tests/test_ha.py -v
 ```
-
-### Run All HA Tests with H2 database
-
-To run tests with H2 database instead of PostgreSQL, set the following environment variable:
-
-```bash
-DROOLS_HA_DB_TYPE=h2 DROOLS_HA_H2_FILE=./eda_ha python3.9 -m pytest tests/test_ha.py -v
-````
-
-After the tests, you may delete the `./eda_ha.mv.db` file if desired.
 
 ### Run Specific Test
 

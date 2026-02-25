@@ -786,3 +786,292 @@ async def test_ha_failover_with_multiple_actions(db_params):
                 await async_task2
             except asyncio.CancelledError:
                 pass
+
+
+@pytest.mark.asyncio
+async def test_ha_failover_once_after(db_params):
+    """Test OnceAfter rule surviving a failover.
+
+    Worker-1 sends several events (building up the once_after buffer)
+    then goes down before the time window expires. Worker-2 takes over,
+    recovers the buffered state, advances time past the window, and
+    verifies the rule fires with accumulated events from worker-1.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    test_data = load_ast("asts/test_once_after_ha_ast.yml")
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "r1"
+
+    # --- Worker 1: send events, go down before once_after fires ---
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(
+        handle_async_messages(reader1, writer1)
+    )
+
+    try:
+        initialize_ha(ha_uuid, "worker-1", db_params, {})
+
+        my_callback1 = mock.Mock()
+        rs1 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs1.add_rule(Rule(rule_name, my_callback1))
+
+        enable_leader()
+        print("worker-1 became a Leader")
+
+        # Send 5 events — once_after window is 2 seconds,
+        # so the rule won't fire until time is advanced
+        for i in range(5):
+            rs1.assert_event(
+                json.dumps(dict(i=i, meta=dict(host="A")))
+            )
+        print("worker-1 sent 5 events")
+
+        # Give async processing time
+        await asyncio.sleep(0.5)
+
+        # Rule should NOT have fired (still within once_after window)
+        assert not my_callback1.called, (
+            "Rule should not fire before once_after window expires"
+        )
+        print("Confirmed: rule did not fire on worker-1")
+
+        # Worker 1 goes down
+        disable_leader()
+        rs1.end_session()
+        print("worker-1 disabled and session ended")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    # Shutdown RulesetCollection to simulate worker-1 JVM going down
+    if RulesetCollection.engine is not None:
+        print("Shutting down RulesetCollection")
+        shutdown()
+    print("RulesetCollection shut down")
+
+    # --- Worker 2: take over, recover state, advance time ---
+    reader2, writer2 = await establish_async_channel()
+    async_task2 = asyncio.create_task(
+        handle_async_messages(reader2, writer2)
+    )
+
+    try:
+        initialize_ha(ha_uuid, "worker-2", db_params, {})
+
+        captured_matches = []
+
+        def capture_callback(matches):
+            captured_matches.append(matches)
+
+        my_callback2 = mock.Mock(side_effect=capture_callback)
+        rs2 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs2.add_rule(Rule(rule_name, my_callback2))
+
+        # Yield to ensure async handler starts reading
+        await asyncio.sleep(0.1)
+
+        enable_leader()
+        print("worker-2 became a Leader")
+
+        # Wait for recovery of buffered state from worker-1
+        print("Waiting for recovery...")
+        await asyncio.sleep(0.5)
+
+        # Advance time past the once_after window (2 seconds)
+        rs2.advance_time(3, "Seconds")
+        print("worker-2 advanced time by 3 seconds")
+
+        # Wait for async match delivery
+        await asyncio.sleep(1.0)
+
+        # The rule should have fired after time advanced past window
+        assert my_callback2.called, (
+            "Rule should fire after once_after window expires"
+        )
+        assert len(captured_matches) > 0
+        print(
+            f"Rule fired on worker-2! "
+            f"matching_uuid: {captured_matches[0].matching_uuid}"
+        )
+
+        match_data = captured_matches[0].data
+        print(f"Match data: {match_data}")
+
+        # Clean up
+        matching_uuid = captured_matches[0].matching_uuid
+        if matching_uuid:
+            delete_action_info(
+                ruleset_data["name"], matching_uuid
+            )
+        disable_leader()
+        rs2.end_session()
+        print("worker-2 cleaned up")
+    finally:
+        if not async_task2.done():
+            async_task2.cancel()
+            try:
+                await async_task2
+            except asyncio.CancelledError:
+                pass
+
+
+@pytest.mark.asyncio
+async def test_ha_failover_timed_out(db_params):
+    """Test NotAllCondition (TimedOut) rule surviving a failover.
+
+    Uses a NotAllCondition rule that expects events i and j within
+    2 seconds. Worker-1 sends only event i, then goes down before
+    the timeout. Worker-2 takes over, recovers the partial match,
+    advances time past the timeout, and the rule fires because
+    event j never arrived.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    test_data = load_ast("asts/test_not_all_ha_ast.yml")
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "r1"
+
+    # --- Worker 1: send event i, go down before timeout ---
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(
+        handle_async_messages(reader1, writer1)
+    )
+
+    try:
+        initialize_ha(ha_uuid, "worker-1", db_params, {})
+
+        my_callback1 = mock.Mock()
+        rs1 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs1.add_rule(Rule(rule_name, my_callback1))
+
+        enable_leader()
+        print("worker-1 became a Leader")
+
+        # Send event i — starts the NotAllCondition timer
+        rs1.assert_event(
+            json.dumps(dict(i=42, host="A"))
+        )
+        print("worker-1 sent event {i: 42}")
+
+        # Give async processing time
+        await asyncio.sleep(0.5)
+
+        # Rule should NOT have fired yet (timeout hasn't expired
+        # and j could still arrive)
+        assert not my_callback1.called, (
+            "Rule should not fire before timeout expires"
+        )
+        print("Confirmed: rule did not fire on worker-1")
+
+        # Worker 1 goes down
+        disable_leader()
+        rs1.end_session()
+        print("worker-1 disabled and session ended")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    # Shutdown RulesetCollection to simulate worker-1 JVM down
+    if RulesetCollection.engine is not None:
+        print("Shutting down RulesetCollection")
+        shutdown()
+    print("RulesetCollection shut down")
+
+    # --- Worker 2: take over, recover state, advance time ---
+    reader2, writer2 = await establish_async_channel()
+    async_task2 = asyncio.create_task(
+        handle_async_messages(reader2, writer2)
+    )
+
+    try:
+        initialize_ha(ha_uuid, "worker-2", db_params, {})
+
+        captured_matches = []
+
+        def capture_callback(matches):
+            captured_matches.append(matches)
+
+        my_callback2 = mock.Mock(side_effect=capture_callback)
+        rs2 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs2.add_rule(Rule(rule_name, my_callback2))
+
+        # Yield to ensure async handler starts reading
+        await asyncio.sleep(0.1)
+
+        enable_leader()
+        print("worker-2 became a Leader")
+
+        # Wait for recovery of partial match from worker-1
+        print("Waiting for recovery...")
+        await asyncio.sleep(0.5)
+
+        # Advance time past the NotAllCondition timeout
+        rs2.advance_time(3, "Seconds")
+        print("worker-2 advanced time by 3 seconds")
+
+        # Wait for async match delivery
+        await asyncio.sleep(1.0)
+
+        # The rule should fire: event i arrived but j never did
+        assert my_callback2.called, (
+            "Rule should fire after timeout (j never arrived)"
+        )
+        assert len(captured_matches) > 0
+        print(
+            f"Rule fired on worker-2! "
+            f"matching_uuid: "
+            f"{captured_matches[0].matching_uuid}"
+        )
+
+        match_data = captured_matches[0].data
+        print(f"Match data: {match_data}")
+
+        # Verify match contains event i from worker-1
+        assert "m_0" in match_data
+        assert match_data["m_0"]["i"] == 42
+
+        # Clean up
+        matching_uuid = captured_matches[0].matching_uuid
+        if matching_uuid:
+            delete_action_info(
+                ruleset_data["name"], matching_uuid
+            )
+        disable_leader()
+        rs2.end_session()
+        print("worker-2 cleaned up")
+    finally:
+        if not async_task2.done():
+            async_task2.cancel()
+            try:
+                await async_task2
+            except asyncio.CancelledError:
+                pass

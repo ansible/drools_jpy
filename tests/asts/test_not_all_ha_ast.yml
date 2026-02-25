@@ -1,0 +1,27 @@
+- RuleSet:
+    hosts:
+    - localhost
+    name: Not all HA failover
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          NotAllCondition:
+          - IsDefinedExpression:
+              Event: i
+          - IsDefinedExpression:
+              Event: j
+          timeout: 2 seconds
+        enabled: true
+        name: r1
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          delay: 1
+          limit: 50
+        source_filters: []
+        source_name: range

@@ -1,0 +1,28 @@
+- RuleSet:
+    hosts:
+    - localhost
+    name: Once after HA failover
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: debug
+            action_args: {}
+        condition:
+          AllCondition:
+          - IsDefinedExpression:
+              Event: i
+        enabled: true
+        name: r1
+        throttle:
+          once_after: 2 seconds
+          group_by_attributes:
+          - event.meta.host
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          delay: 1
+          limit: 50
+        source_filters: []
+        source_name: range

@@ -59,6 +59,7 @@ def ha_config():
     """HA configuration parameters"""
     return {
         "write_after": 1,  # not yet implemented
+        "dedup_buffer_size": 5, # default is 5
     }
 
 
@@ -486,8 +487,7 @@ async def test_ha_failover_scenario(db_params):
     # AstRulesEngine and async server socket.
     # This allows Leader 2 to create a new engine.
     print(
-        "Shutting down RulesetCollection"
-        " (simulating Leader 1 JVM shutdown)"
+        "Shutting down RulesetCollection" " (simulating Leader 1 JVM shutdown)"
     )
     shutdown()
     print("RulesetCollection shut down")
@@ -994,6 +994,185 @@ async def test_ha_failover_once_after(db_params):
 
         # Clean up
         matching_uuid = captured_matches[0].matching_uuid
+        if matching_uuid:
+            delete_action_info(ruleset_data["name"], matching_uuid)
+        disable_leader()
+        rs2.end_session()
+        print("worker-2 cleaned up")
+    finally:
+        if not async_task2.done():
+            async_task2.cancel()
+            try:
+                await async_task2
+            except asyncio.CancelledError:
+                pass
+
+
+@pytest.mark.asyncio
+async def test_ha_duplicate_event_detection_survives_failover(db_params, ha_config):
+    """Test duplicate event detection surviving a failover.
+
+    Worker-1 processes an event with a specific UUID (temperature > 30),
+    then goes down. Worker-2 takes over and re-sends the same event
+    (same UUID). The duplicate should be detected and ignored (no match).
+    A new event with a different UUID should still be processed normally.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    test_data = load_ast("asts/test_dedup_ha_ast.yml")
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "temperature_alert"
+
+    dup_event_uuid = "failover-1111-2222-3333-444444444444"
+    new_event_uuid = "new-event-2222-3333-4444-555555555555"
+
+    # --- Worker 1: process event, then go down ---
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
+
+    try:
+        initialize_ha(ha_uuid, "worker-1", db_params, ha_config)
+
+        captured_matches_1 = []
+
+        def capture_callback_1(matches):
+            captured_matches_1.append(matches)
+
+        my_callback1 = mock.Mock(side_effect=capture_callback_1)
+        rs1 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs1.add_rule(Rule(rule_name, my_callback1))
+
+        enable_leader()
+        print("worker-1 became a Leader")
+
+        # Send event with temperature=35 (> 30) and a specific UUID
+        event = json.dumps(
+            {
+                "meta": {"uuid": dup_event_uuid},
+                "temperature": 35,
+            }
+        )
+        rs1.assert_event(event)
+        print("worker-1 sent event with temperature=35")
+
+        # Give async processing time
+        await asyncio.sleep(0.5)
+
+        # Rule should have fired (temperature 35 > 30)
+        assert my_callback1.called, "Rule should fire for temperature > 30"
+        assert len(captured_matches_1) > 0
+        print(
+            f"Rule fired on worker-1! "
+            f"matching_uuid: "
+            f"{captured_matches_1[0].matching_uuid}"
+        )
+
+        # Worker 1 goes down
+        disable_leader()
+        rs1.end_session()
+        print("worker-1 disabled and session ended")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    # Shutdown RulesetCollection to simulate worker-1 JVM going down
+    if RulesetCollection.engine is not None:
+        print("Shutting down RulesetCollection")
+        shutdown()
+    print("RulesetCollection shut down")
+
+    # --- Worker 2: take over, re-send same event (should be ignored) ---
+    reader2, writer2 = await establish_async_channel()
+    async_task2 = asyncio.create_task(handle_async_messages(reader2, writer2))
+
+    try:
+        initialize_ha(ha_uuid, "worker-2", db_params, {})
+
+        captured_matches_2 = []
+
+        def capture_callback_2(matches):
+            captured_matches_2.append(matches)
+
+        my_callback2 = mock.Mock(side_effect=capture_callback_2)
+        rs2 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs2.add_rule(Rule(rule_name, my_callback2))
+
+        # Yield to ensure async handler starts reading
+        await asyncio.sleep(0.1)
+
+        enable_leader()
+        print("worker-2 became a Leader")
+
+        # Wait for recovery (may dispatch recovery events)
+        print("Waiting for recovery...")
+        await asyncio.sleep(0.5)
+
+        # Reset tracking after recovery so recovery events
+        # don't interfere with duplicate detection checks
+        my_callback2.reset_mock()
+        captured_matches_2.clear()
+        print("Reset mock after recovery")
+
+        # Re-send the same event (same UUID) — should be
+        # detected as duplicate and ignored
+        event = json.dumps(
+            {
+                "meta": {"uuid": dup_event_uuid},
+                "temperature": 35,
+            }
+        )
+        rs2.assert_event(event)
+        print("worker-2 re-sent duplicate event " "(same UUID as worker-1)")
+
+        # Give async processing time
+        await asyncio.sleep(0.5)
+
+        # Rule should NOT fire — event is a duplicate
+        assert (
+            not my_callback2.called
+        ), "Duplicate event should be ignored after failover"
+        assert len(captured_matches_2) == 0
+        print("Confirmed: duplicate event was ignored " "on worker-2")
+
+        # Send a NEW event with a different UUID —
+        # should be processed normally
+        new_event = json.dumps(
+            {
+                "meta": {"uuid": new_event_uuid},
+                "temperature": 40,
+            }
+        )
+        rs2.assert_event(new_event)
+        print("worker-2 sent new event with temperature=40")
+
+        # Give async processing time
+        await asyncio.sleep(0.5)
+
+        # Rule should fire for the new event
+        assert my_callback2.called, "New event should be processed normally"
+        assert len(captured_matches_2) > 0
+        print(
+            f"Rule fired on worker-2 for new event! "
+            f"matching_uuid: "
+            f"{captured_matches_2[0].matching_uuid}"
+        )
+
+        # Clean up
+        matching_uuid = captured_matches_2[0].matching_uuid
         if matching_uuid:
             delete_action_info(ruleset_data["name"], matching_uuid)
         disable_leader()

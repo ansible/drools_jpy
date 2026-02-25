@@ -1,0 +1,18 @@
+---
+- RuleSet:
+    name: Dedup Test Ruleset
+    sources:
+      - EventSource:
+          name: test
+    rules:
+      - Rule:
+          name: temperature_alert
+          condition:
+            GreaterThanExpression:
+              lhs:
+                Event: temperature
+              rhs:
+                Integer: 30
+          action:
+            run_playbook:
+              - name: send_alert.yml

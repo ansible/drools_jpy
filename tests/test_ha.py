@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import os
 import uuid
@@ -1314,6 +1315,247 @@ async def test_ha_failover_timed_out(db_params):
         matching_uuid = captured_matches[0].matching_uuid
         if matching_uuid:
             delete_action_info(ruleset_data["name"], matching_uuid)
+        disable_leader()
+        rs2.end_session()
+        print("worker-2 cleaned up")
+    finally:
+        if not async_task2.done():
+            async_task2.cancel()
+            try:
+                await async_task2
+            except asyncio.CancelledError:
+                pass
+
+
+def _generate_encryption_key():
+    """Generate a random 256-bit AES key, base64-encoded."""
+    key_bytes = os.urandom(32)
+    return base64.b64encode(key_bytes).decode("ascii")
+
+
+def _query_raw_column(db_params, sql, param_value):
+    """Query a raw column value from DB via JDBC through JPY.
+
+    Bypasses the state manager's decryption so we can verify
+    data is actually encrypted at rest.
+    """
+    import jpy
+
+    DriverManager = jpy.get_type("java.sql.DriverManager")
+
+    db_type = db_params.get("db_type", "h2")
+    if db_type == "h2":
+        db_file = db_params.get("db_file_path", "./eda_ha")
+        jdbc_url = (
+            f"jdbc:h2:file:{db_file};MODE=PostgreSQL"
+        )
+        conn = DriverManager.getConnection(jdbc_url, "SA", "")
+    else:
+        host = db_params.get("host", "localhost")
+        port = db_params.get("port", 5432)
+        database = db_params.get("database", "eda_ha_db")
+        user = db_params.get("user", "eda_user")
+        password = db_params.get("password", "eda_password")
+        jdbc_url = (
+            f"jdbc:postgresql://{host}:{port}/{database}"
+        )
+        conn = DriverManager.getConnection(
+            jdbc_url, user, password
+        )
+
+    try:
+        stmt = conn.prepareStatement(sql)
+        stmt.setString(1, param_value)
+        rs = stmt.executeQuery()
+        if rs.next():
+            return rs.getString(1)
+        return None
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_ha_encryption_failover(db_params):
+    """Test HA with encryption enabled across a failover.
+
+    Worker-1 initializes HA with an encryption key, fires a rule,
+    and persists encrypted state. Worker-1 goes down. Worker-2
+    takes over with the same encryption key, recovers the encrypted
+    matching event via async channel, and verifies action info
+    created by worker-1 is readable.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    encryption_key = _generate_encryption_key()
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    enc_ha_config = {
+        "encryption_key_primary": encryption_key,
+    }
+
+    test_data = load_ast("asts/rules_with_assignment.yml")
+    ruleset_data = test_data[0]["RuleSet"]
+
+    # --- Worker 1: fire rule with encryption, then go down ---
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(
+        handle_async_messages(reader1, writer1)
+    )
+
+    try:
+        initialize_ha(ha_uuid, "worker-1", db_params, enc_ha_config)
+
+        captured_matches = []
+
+        def capture_callback(matches):
+            captured_matches.append(matches)
+            async_task1.cancel()
+
+        my_callback1 = mock.Mock(side_effect=capture_callback)
+        rs1 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs1.add_rule(Rule("assignment", my_callback1))
+
+        enable_leader()
+        print("worker-1 became a Leader (encryption enabled)")
+
+        # Assert an event that will match the rule
+        rs1.assert_event(json.dumps(dict(i=67)))
+
+        # Wait for async task
+        try:
+            await async_task1
+        except asyncio.CancelledError:
+            pass
+
+        # Verify the callback was called
+        assert my_callback1.called
+        assert len(captured_matches) > 0
+
+        matching_uuid = captured_matches[0].matching_uuid
+        assert (
+            matching_uuid is not None
+        ), "matching_uuid should be present in HA mode"
+        print(
+            f"Rule fired on worker-1! "
+            f"matching_uuid: {matching_uuid}"
+        )
+
+        # Add action info (persisted with encryption)
+        action_data = json.dumps(
+            {"action": "print_event", "status": "1"}
+        )
+        add_action_info(
+            ruleset_data["name"], matching_uuid, 0, action_data
+        )
+        assert action_info_exists(
+            ruleset_data["name"], matching_uuid, 0
+        )
+        print("worker-1 added action info (encrypted)")
+
+        # Verify raw DB columns are encrypted
+        raw_event_data = _query_raw_column(
+            db_params,
+            "SELECT event_data "
+            "FROM drools_ansible_matching_event "
+            "WHERE ha_uuid = ?",
+            ha_uuid,
+        )
+        assert raw_event_data is not None, (
+            "matching_event row should exist"
+        )
+        assert raw_event_data.startswith("$ENCRYPTED$"), (
+            f"event_data should be encrypted, "
+            f"got: {raw_event_data[:50]}"
+        )
+        print(
+            f"Verified: event_data is encrypted "
+            f"({raw_event_data[:30]}...)"
+        )
+
+        raw_session_state = _query_raw_column(
+            db_params,
+            "SELECT partial_matching_events "
+            "FROM drools_ansible_session_state "
+            "WHERE ha_uuid = ?",
+            ha_uuid,
+        )
+        assert raw_session_state is not None, (
+            "session_state row should exist"
+        )
+        assert raw_session_state.startswith("$ENCRYPTED$"), (
+            f"partial_matching_events should be encrypted, "
+            f"got: {raw_session_state[:50]}"
+        )
+        print(
+            f"Verified: session_state is encrypted "
+            f"({raw_session_state[:30]}...)"
+        )
+
+        # Worker 1 goes down
+        disable_leader()
+        rs1.end_session()
+        print("worker-1 disabled and session ended")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    # Shutdown RulesetCollection to simulate worker-1 JVM down
+    if RulesetCollection.engine is not None:
+        print("Shutting down RulesetCollection")
+        shutdown()
+    print("RulesetCollection shut down")
+
+    # --- Worker 2: take over with same encryption key ---
+    reader2, writer2 = await establish_async_channel()
+    async_task2 = asyncio.create_task(
+        handle_async_messages(reader2, writer2)
+    )
+
+    try:
+        initialize_ha(ha_uuid, "worker-2", db_params, enc_ha_config)
+
+        my_callback2 = mock.Mock()
+        rs2 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs2.add_rule(Rule("assignment", my_callback2))
+
+        # Yield to ensure async handler starts reading
+        await asyncio.sleep(0.1)
+
+        enable_leader()
+        print("worker-2 became a Leader (encryption enabled)")
+
+        # Wait for recovery of encrypted state
+        print("Waiting for recovery...")
+        await asyncio.sleep(0.5)
+
+        # Worker-2 should be able to read action info
+        # created by worker-1 (encrypted in DB)
+        assert action_info_exists(
+            ruleset_data["name"], matching_uuid, 0
+        )
+        retrieved = get_action_info(
+            ruleset_data["name"], matching_uuid, 0
+        )
+        assert retrieved == action_data
+        print(
+            "worker-2 successfully read encrypted "
+            "action info from worker-1"
+        )
+
+        # Clean up
+        delete_action_info(ruleset_data["name"], matching_uuid)
         disable_leader()
         rs2.end_session()
         print("worker-2 cleaned up")

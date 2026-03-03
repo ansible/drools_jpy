@@ -1,0 +1,33 @@
+- RuleSet:
+    hosts:
+    - localhost
+    name: GracePeriod TimedOut Ruleset
+    rules:
+    - Rule:
+        action:
+          Action:
+            action: print_event
+            action_args: {}
+        condition:
+          NotAllCondition:
+          - EqualsExpression:
+              lhs:
+                Event: alert.code
+              rhs:
+                Integer: 1001
+          - EqualsExpression:
+              lhs:
+                Event: alert.code
+              rhs:
+                Integer: 1002
+          timeout: 10 seconds
+        enabled: true
+        name: maint failed
+    sources:
+    - EventSource:
+        name: range
+        source_args:
+          delay: 1
+          limit: 50
+        source_filters: []
+        source_name: range

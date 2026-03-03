@@ -1327,6 +1327,344 @@ async def test_ha_failover_timed_out(db_params):
                 pass
 
 
+@pytest.mark.asyncio
+async def test_ha_once_after_grace_period(db_params):
+    """Test OnceAfter with grace period surviving a failover.
+
+    Event at T=0, window=10s, crash at T=8s, Node2 clock at
+    T=15s (5s past expiry). Grace=600s. The match should be
+    captured and dispatched as a recovery event.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    ha_config = {"expired_window_grace_period": 600}
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    test_data = load_ast(
+        "asts/test_once_after_grace_period_ast.yml"
+    )
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "alert_throttle"
+
+    # --- Worker 1: send event, advance to T=8s, go down ---
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(
+        handle_async_messages(reader1, writer1)
+    )
+
+    try:
+        initialize_ha(
+            ha_uuid, "worker-1", db_params, ha_config
+        )
+
+        my_callback1 = mock.Mock()
+        rs1 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs1.add_rule(Rule(rule_name, my_callback1))
+
+        enable_leader()
+        print("worker-1 became a Leader")
+
+        # Send event at T=0
+        rs1.assert_event(
+            json.dumps(
+                {"alert": {"type": "warning", "host": "h1"}}
+            )
+        )
+        print("worker-1 sent alert event")
+
+        # Give async processing time
+        await asyncio.sleep(0.5)
+
+        # Advance to T=8s (still within 10s window)
+        rs1.advance_time(8, "Seconds")
+        print("worker-1 advanced time by 8 seconds")
+
+        # Rule should NOT have fired yet
+        assert not my_callback1.called, (
+            "Rule should not fire before "
+            "once_after window expires"
+        )
+        print("Confirmed: rule did not fire on worker-1")
+
+        # Worker 1 goes down
+        disable_leader()
+        rs1.end_session()
+        print("worker-1 disabled and session ended")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    # Shutdown RulesetCollection to simulate worker-1 down
+    if RulesetCollection.engine is not None:
+        print("Shutting down RulesetCollection")
+        shutdown()
+    print("RulesetCollection shut down")
+
+    # --- Worker 2: advance to T=15s, then take over ---
+    reader2, writer2 = await establish_async_channel()
+    async_task2 = asyncio.create_task(
+        handle_async_messages(reader2, writer2)
+    )
+
+    try:
+        initialize_ha(
+            ha_uuid, "worker-2", db_params, ha_config
+        )
+
+        captured_matches = []
+
+        def capture_callback(matches):
+            captured_matches.append(matches)
+
+        my_callback2 = mock.Mock(
+            side_effect=capture_callback
+        )
+        rs2 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs2.add_rule(Rule(rule_name, my_callback2))
+
+        # Advance Node2 clock to T=15s BEFORE becoming
+        # leader so recovery will jump from T=8s to T=15s
+        rs2.advance_time(15, "Seconds")
+
+        # Yield to ensure async handler starts reading
+        await asyncio.sleep(0.1)
+
+        # Node2 becomes leader — recovery advances clock
+        # from T=8s (persisted) to T=15s (Node2 clock).
+        # The once_after timer expires during this clock
+        # jump (5s past expiry, within 600s grace).
+        enable_leader()
+        print("worker-2 became a Leader")
+
+        # Wait for recovery and async delivery
+        print("Waiting for recovery...")
+        await asyncio.sleep(1.0)
+
+        # The match should have been dispatched
+        assert my_callback2.called, (
+            "Grace period match should be dispatched "
+            "via async channel"
+        )
+        assert len(captured_matches) > 0
+        print(
+            f"Rule fired on worker-2! "
+            f"matching_uuid: "
+            f"{captured_matches[0].matching_uuid}"
+        )
+
+        # After recovery, advancing time should NOT
+        # produce a duplicate match
+        initial_count = len(captured_matches)
+        rs2.advance_time(5, "Seconds")
+        await asyncio.sleep(0.5)
+        assert len(captured_matches) == initial_count, (
+            "No duplicate match should fire "
+            "after grace period recovery"
+        )
+        print("Confirmed: no duplicate match")
+
+        # Clean up
+        matching_uuid = captured_matches[0].matching_uuid
+        if matching_uuid:
+            delete_action_info(
+                ruleset_data["name"], matching_uuid
+            )
+        disable_leader()
+        rs2.end_session()
+        print("worker-2 cleaned up")
+    finally:
+        if not async_task2.done():
+            async_task2.cancel()
+            try:
+                await async_task2
+            except asyncio.CancelledError:
+                pass
+
+
+@pytest.mark.asyncio
+async def test_ha_timed_out_grace_period(db_params):
+    """Test TimedOut with grace period surviving a failover.
+
+    Partial match (code=1001) at T=0, timeout=10s, crash at
+    T=8s, Node2 clock at T=15s (5s past timeout). Grace=600s.
+    The match should be captured and dispatched as a recovery
+    event.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    ha_config = {"expired_window_grace_period": 600}
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    test_data = load_ast(
+        "asts/test_not_all_grace_period_ast.yml"
+    )
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "maint failed"
+
+    # --- Worker 1: send partial match, advance to T=8s ---
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(
+        handle_async_messages(reader1, writer1)
+    )
+
+    try:
+        initialize_ha(
+            ha_uuid, "worker-1", db_params, ha_config
+        )
+
+        my_callback1 = mock.Mock()
+        rs1 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs1.add_rule(Rule(rule_name, my_callback1))
+
+        enable_leader()
+        print("worker-1 became a Leader")
+
+        # Send partial match: code=1001 (only 1 of 2)
+        rs1.assert_event(
+            json.dumps(
+                {
+                    "alert": {
+                        "code": 1001,
+                        "message": "Applying maintenance",
+                    }
+                }
+            )
+        )
+        print("worker-1 sent partial match event")
+
+        # Give async processing time
+        await asyncio.sleep(0.5)
+
+        # Advance to T=8s (timeout at T=10s)
+        rs1.advance_time(8, "Seconds")
+        print("worker-1 advanced time by 8 seconds")
+
+        # Rule should NOT have fired (timeout not expired
+        # and code=1002 could still arrive)
+        assert not my_callback1.called, (
+            "Rule should not fire before timeout expires"
+        )
+        print("Confirmed: rule did not fire on worker-1")
+
+        # Worker 1 goes down
+        disable_leader()
+        rs1.end_session()
+        print("worker-1 disabled and session ended")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    # Shutdown RulesetCollection to simulate worker-1 down
+    if RulesetCollection.engine is not None:
+        print("Shutting down RulesetCollection")
+        shutdown()
+    print("RulesetCollection shut down")
+
+    # --- Worker 2: advance to T=15s, then take over ---
+    reader2, writer2 = await establish_async_channel()
+    async_task2 = asyncio.create_task(
+        handle_async_messages(reader2, writer2)
+    )
+
+    try:
+        initialize_ha(
+            ha_uuid, "worker-2", db_params, ha_config
+        )
+
+        captured_matches = []
+
+        def capture_callback(matches):
+            captured_matches.append(matches)
+
+        my_callback2 = mock.Mock(
+            side_effect=capture_callback
+        )
+        rs2 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs2.add_rule(Rule(rule_name, my_callback2))
+
+        # Advance Node2 clock to T=15s BEFORE becoming
+        # leader so recovery will jump from T=8s to T=15s
+        rs2.advance_time(15, "Seconds")
+
+        # Yield to ensure async handler starts reading
+        await asyncio.sleep(0.1)
+
+        # Node2 becomes leader — recovery advances clock
+        # from T=8s (persisted) to T=15s (Node2 clock).
+        # The timeout expires during this clock jump
+        # (5s past timeout, within 600s grace).
+        enable_leader()
+        print("worker-2 became a Leader")
+
+        # Wait for recovery and async delivery
+        print("Waiting for recovery...")
+        await asyncio.sleep(1.0)
+
+        # The match should have been dispatched
+        assert my_callback2.called, (
+            "Grace period match should be dispatched "
+            "via async channel"
+        )
+        assert len(captured_matches) > 0
+        print(
+            f"Rule fired on worker-2! "
+            f"matching_uuid: "
+            f"{captured_matches[0].matching_uuid}"
+        )
+
+        # After recovery, advancing time should NOT
+        # produce a duplicate match
+        initial_count = len(captured_matches)
+        rs2.advance_time(5, "Seconds")
+        await asyncio.sleep(0.5)
+        assert len(captured_matches) == initial_count, (
+            "No duplicate match should fire "
+            "after grace period recovery"
+        )
+        print("Confirmed: no duplicate match")
+
+        # Clean up
+        matching_uuid = captured_matches[0].matching_uuid
+        if matching_uuid:
+            delete_action_info(
+                ruleset_data["name"], matching_uuid
+            )
+        disable_leader()
+        rs2.end_session()
+        print("worker-2 cleaned up")
+    finally:
+        if not async_task2.done():
+            async_task2.cancel()
+            try:
+                await async_task2
+            except asyncio.CancelledError:
+                pass
+
+
 def _generate_encryption_key():
     """Generate a random 256-bit AES key, base64-encoded."""
     key_bytes = os.urandom(32)

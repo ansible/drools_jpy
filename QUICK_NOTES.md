@@ -14,6 +14,11 @@ See tests/README_HA_TESTS.md for more details.
 4. `DROOLS_HA_DB_TYPE=postgres python3.9 -m pytest tests/test_ha.py -s --log-cli-level=DEBUG` -> All tests should pass.
 5. `docker-compose down -v` to stop and remove data.
 
+To access the PostgreSQL database directly (e.g., for debugging), you can connect with:
+```bash
+docker exec -it eda-ha-postgres psql -U eda_user -d eda_ha_db
+```
+
 ## How to run with PostgreSQL SSL (mTLS)
 
 1. Build drools_jpy (`source venv/bin/activate`, `python3.9 -m pip install .`)

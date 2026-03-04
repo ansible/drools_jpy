@@ -1904,3 +1904,234 @@ async def test_ha_encryption_failover(db_params):
                 await async_task2
             except asyncio.CancelledError:
                 pass
+
+    # Final cleanup
+    if RulesetCollection.engine is not None:
+        shutdown()
+
+
+@pytest.mark.asyncio
+async def test_ha_key_rotation_with_restart(db_params):
+    """Test encryption key rotation across a graceful restart.
+
+    Worker-1 starts as leader with the original encryption key,
+    fires a rule, and persists encrypted state. Worker-1 shuts
+    down (graceful restart, not failover). Worker-1 restarts with
+    a rotated key pair (new primary + old key as secondary).
+    Recovery decrypts using the secondary key fallback. A
+    non-matching event triggers session state re-encryption with
+    the new primary key. Finally we verify that the re-encrypted
+    session state can be decrypted with only the new key.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    original_key = _generate_encryption_key()
+    new_key = _generate_encryption_key()
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    original_ha_config = {
+        "encryption_key_primary": original_key,
+    }
+
+    test_data = load_ast("asts/rules_with_assignment.yml")
+    ruleset_data = test_data[0]["RuleSet"]
+
+    # === Phase 1: Worker-1 as leader with original key ===
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(
+        handle_async_messages(reader1, writer1)
+    )
+
+    try:
+        initialize_ha(
+            ha_uuid, "worker-1", db_params, original_ha_config
+        )
+
+        captured_matches = []
+
+        def capture_callback(matches):
+            captured_matches.append(matches)
+            async_task1.cancel()
+
+        my_callback1 = mock.Mock(side_effect=capture_callback)
+        rs1 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs1.add_rule(Rule("assignment", my_callback1))
+
+        enable_leader()
+        print("worker-1 became a Leader (original key)")
+
+        # Assert an event that will match the rule
+        rs1.assert_event(json.dumps(dict(i=67)))
+
+        # Wait for async task
+        try:
+            await async_task1
+        except asyncio.CancelledError:
+            pass
+
+        # Verify the callback was called
+        assert my_callback1.called
+        assert len(captured_matches) > 0
+
+        matching_uuid = captured_matches[0].matching_uuid
+        assert (
+            matching_uuid is not None
+        ), "matching_uuid should be present in HA mode"
+        print(
+            f"Rule fired on worker-1! "
+            f"matching_uuid: {matching_uuid}"
+        )
+
+        # Verify raw DB column is encrypted with original key
+        raw_event_data = _query_raw_column(
+            db_params,
+            "SELECT event_data "
+            "FROM drools_ansible_matching_event "
+            "WHERE ha_uuid = ?",
+            ha_uuid,
+        )
+        assert raw_event_data is not None, (
+            "matching_event row should exist"
+        )
+        assert raw_event_data.startswith("$ENCRYPTED$"), (
+            f"event_data should be encrypted, "
+            f"got: {raw_event_data[:50]}"
+        )
+        print(
+            f"Verified: event_data is encrypted "
+            f"({raw_event_data[:30]}...)"
+        )
+
+        # Shut down worker-1 (graceful restart)
+        disable_leader()
+        rs1.end_session()
+        print("worker-1 disabled and session ended")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    # Shutdown RulesetCollection to simulate full restart
+    if RulesetCollection.engine is not None:
+        print("Shutting down RulesetCollection")
+        shutdown()
+    print("=== Restarting with rotated keys ===")
+
+    # === Phase 2: Restart with rotated keys ===
+    rotated_ha_config = {
+        "encryption_key_primary": new_key,
+        "encryption_key_secondary": original_key,
+    }
+
+    reader2, writer2 = await establish_async_channel()
+    async_task2 = asyncio.create_task(
+        handle_async_messages(reader2, writer2)
+    )
+
+    try:
+        initialize_ha(
+            ha_uuid,
+            "worker-1-rotated",
+            db_params,
+            rotated_ha_config,
+        )
+
+        recovered_matches = []
+
+        def recovery_callback(matches):
+            recovered_matches.append(matches)
+
+        my_callback2 = mock.Mock(side_effect=recovery_callback)
+        rs2 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs2.add_rule(Rule("assignment", my_callback2))
+
+        # Yield to ensure async handler starts reading
+        await asyncio.sleep(0.1)
+
+        enable_leader()
+        print(
+            "worker-1-rotated became a Leader "
+            "(new primary + old secondary)"
+        )
+
+        # Wait for recovery — should decrypt with secondary key
+        print("Waiting for recovery...")
+        await asyncio.sleep(1.0)
+
+        # Assert a non-matching event to trigger session state
+        # persist, which re-encrypts with the new primary key
+        rs2.assert_event(json.dumps(dict(i=1)))
+        print("Asserted non-matching event to trigger re-encryption")
+
+        # Give time for persist
+        await asyncio.sleep(0.5)
+
+        # Verify session state is re-encrypted with new key
+        raw_session_state = _query_raw_column(
+            db_params,
+            "SELECT partial_matching_events "
+            "FROM drools_ansible_session_state "
+            "WHERE ha_uuid = ? "
+            "ORDER BY version DESC LIMIT 1",
+            ha_uuid,
+        )
+        assert raw_session_state is not None, (
+            "session_state row should exist after re-encryption"
+        )
+        assert raw_session_state.startswith("$ENCRYPTED$"), (
+            f"session_state should be encrypted, "
+            f"got: {raw_session_state[:50]}"
+        )
+        print(
+            f"Verified: session_state is encrypted "
+            f"({raw_session_state[:30]}...)"
+        )
+
+        # Decrypt with only the new key (no secondary)
+        # to confirm re-encryption used the new primary key
+        import jpy
+
+        HAEncryption = jpy.get_type(
+            "org.drools.ansible.rulebook.integration"
+            ".ha.api.HAEncryption"
+        )
+        rotated_only = HAEncryption(new_key, None)
+        decrypt_result = rotated_only.decrypt(raw_session_state)
+        assert not decrypt_result.usedSecondaryKey(), (
+            "Should decrypt with primary (new) key, "
+            "not secondary"
+        )
+        assert decrypt_result.plaintext() is not None, (
+            "Decrypted session state should not be None"
+        )
+        print(
+            "Verified: session state re-encrypted "
+            "with new primary key"
+        )
+
+        # Clean up
+        disable_leader()
+        rs2.end_session()
+        print("worker-1-rotated cleaned up")
+    finally:
+        if not async_task2.done():
+            async_task2.cancel()
+            try:
+                await async_task2
+            except asyncio.CancelledError:
+                pass
+
+    # Final cleanup
+    if RulesetCollection.engine is not None:
+        shutdown()

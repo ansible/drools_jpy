@@ -24,6 +24,7 @@ from drools.ruleset import (
     get_action_info,
     get_action_status,
     get_ha_stats,
+    get_partial_event_ids,
     initialize_ha,
     shutdown,
     update_action_info,
@@ -1671,7 +1672,7 @@ def _generate_encryption_key():
     return base64.b64encode(key_bytes).decode("ascii")
 
 
-def _query_raw_column(db_params, sql, param_value):
+def _query_raw_column(db_params, sql, *param_values):
     """Query a raw column value from DB via JDBC through JPY.
 
     Bypasses the state manager's decryption so we can verify
@@ -1703,7 +1704,8 @@ def _query_raw_column(db_params, sql, param_value):
 
     try:
         stmt = conn.prepareStatement(sql)
-        stmt.setString(1, param_value)
+        for i, val in enumerate(param_values, 1):
+            stmt.setString(i, val)
         rs = stmt.executeQuery()
         if rs.next():
             return rs.getString(1)
@@ -2083,8 +2085,9 @@ async def test_ha_key_rotation_with_restart(db_params):
             "SELECT partial_matching_events "
             "FROM drools_ansible_session_state "
             "WHERE ha_uuid = ? "
-            "ORDER BY version DESC LIMIT 1",
+            "AND rule_set_name = ?",
             ha_uuid,
+            ruleset_data["name"],
         )
         assert raw_session_state is not None, (
             "session_state row should exist after re-encryption"
@@ -2124,6 +2127,153 @@ async def test_ha_key_rotation_with_restart(db_params):
         disable_leader()
         rs2.end_session()
         print("worker-1-rotated cleaned up")
+    finally:
+        if not async_task2.done():
+            async_task2.cancel()
+            try:
+                await async_task2
+            except asyncio.CancelledError:
+                pass
+
+    # Final cleanup
+    if RulesetCollection.engine is not None:
+        shutdown()
+
+
+@pytest.mark.asyncio
+async def test_ha_get_partial_event_ids_survives_failover(
+    db_params,
+):
+    """Test getPartialEventIds API survives failover.
+
+    Worker-1 sends two partial events (only first condition
+    of a two-condition AllCondition rule), then goes down.
+    Worker-2 takes over and verifies that getPartialEventIds
+    returns the same event UUIDs after recovery.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    test_data = load_ast(
+        "asts/rules_with_multiple_conditions_all_assignment.yml"
+    )
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "multiple conditions"
+
+    # --- Worker 1: send partial events ---
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(
+        handle_async_messages(reader1, writer1)
+    )
+
+    event_uuid1 = str(uuid.uuid4())
+    event_uuid2 = str(uuid.uuid4())
+
+    try:
+        initialize_ha(ha_uuid, "worker-1", db_params, {})
+
+        my_callback1 = mock.Mock()
+        rs1 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs1.add_rule(Rule(rule_name, my_callback1))
+
+        enable_leader()
+        print("worker-1 became a Leader")
+
+        # Send two events satisfying only the first condition
+        # (i==0) with explicit UUIDs via meta
+        event1 = json.dumps(
+            {"meta": {"uuid": event_uuid1}, "i": 0}
+        )
+        event2 = json.dumps(
+            {"meta": {"uuid": event_uuid2}, "i": 0}
+        )
+        rs1.assert_event(event1)
+        rs1.assert_event(event2)
+        print("worker-1 sent two partial events")
+
+        await asyncio.sleep(0.5)
+
+        # Rule should not have fired
+        assert not my_callback1.called, (
+            "Rule should not fire with only one "
+            "condition matched"
+        )
+
+        # Verify partial event IDs on worker-1
+        partial_ids = get_partial_event_ids(
+            ruleset_data["name"]
+        )
+        print(f"Partial event IDs on worker-1: {partial_ids}")
+        assert len(partial_ids) == 2
+        assert set(partial_ids) == {
+            event_uuid1,
+            event_uuid2,
+        }
+
+        # Worker 1 goes down
+        disable_leader()
+        rs1.end_session()
+        print("worker-1 disabled and session ended")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    if RulesetCollection.engine is not None:
+        shutdown()
+    print("RulesetCollection shut down")
+
+    # --- Worker 2: takes over and verifies partial IDs ---
+    reader2, writer2 = await establish_async_channel()
+    async_task2 = asyncio.create_task(
+        handle_async_messages(reader2, writer2)
+    )
+
+    try:
+        initialize_ha(ha_uuid, "worker-2", db_params, {})
+
+        my_callback2 = mock.Mock()
+        rs2 = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs2.add_rule(Rule(rule_name, my_callback2))
+
+        await asyncio.sleep(0.1)
+
+        enable_leader()
+        print("worker-2 became a Leader")
+
+        await asyncio.sleep(0.5)
+
+        # Verify partial event IDs recovered on worker-2
+        partial_ids = get_partial_event_ids(
+            ruleset_data["name"]
+        )
+        print(
+            f"Partial event IDs on worker-2 "
+            f"(after failover): {partial_ids}"
+        )
+        assert len(partial_ids) == 2
+        assert set(partial_ids) == {
+            event_uuid1,
+            event_uuid2,
+        }
+        print("Partial event IDs survived failover!")
+
+        # Clean up
+        disable_leader()
+        rs2.end_session()
+        print("worker-2 cleaned up")
     finally:
         if not async_task2.done():
             async_task2.cancel()

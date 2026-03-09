@@ -225,6 +225,13 @@ class Ruleset:
         """Delete all actions and matching events for a matching UUID"""
         self._api.deleteActionInfo(self._session_id, matching_uuid)
 
+    def get_partial_event_ids(self) -> List:
+        """Get the IDs of partial events in working memory"""
+        result = self._api.getPartialEventIds(self._session_id)
+        if result:
+            return json.loads(result)
+        return []
+
     def _process_response(self, payload: str):
         if payload is None:
             return
@@ -494,6 +501,11 @@ def get_action_status(ruleset_name: str, matching_uuid: str, index: int) -> str:
 def delete_action_info(ruleset_name: str, matching_uuid: str):
     """Delete all actions and matching events for a matching UUID"""
     return RulesetCollection.get(ruleset_name).delete_action_info(matching_uuid)
+
+
+def get_partial_event_ids(ruleset_name: str) -> List:
+    """Get the IDs of partial events in working memory"""
+    return RulesetCollection.get(ruleset_name).get_partial_event_ids()
 
 # For test convenience
 def shutdown():

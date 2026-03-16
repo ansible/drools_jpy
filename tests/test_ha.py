@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import os
+import shutil
 import uuid
 from unittest import mock
 
@@ -38,22 +39,37 @@ def load_ast(filename: str) -> dict:
     return test_data
 
 
+def _generate_unique_h2_file_path():
+    """Generate a unique H2 file path using UUID to avoid lock
+    contention between tests."""
+    return f"./target/h2-test-{uuid.uuid4()}/eda_ha"
+
+
 @pytest.fixture
 def db_params():
     """DB connection parameters for testing"""
-    return {
+    generated_h2_dir = None
+    env_h2_file = os.environ.get("DROOLS_HA_H2_FILE")
+    if env_h2_file:
+        h2_file_path = env_h2_file
+    else:
+        h2_file_path = _generate_unique_h2_file_path()
+        generated_h2_dir = os.path.dirname(h2_file_path)
+    params = {
         "db_type": os.environ.get(
             "DROOLS_HA_DB_TYPE", "h2"
         ),  # "h2" or "postgres"
-        "db_file_path": os.environ.get(
-            "DROOLS_HA_H2_FILE", "./eda_ha"
-        ),  # Only used for H2, ignored for PostgreSQL
+        "db_file_path": h2_file_path,
         "host": os.environ.get("POSTGRES_HOST", "localhost"),
         "port": int(os.environ.get("POSTGRES_PORT", "5432")),
         "database": os.environ.get("POSTGRES_DB", "eda_ha_db"),
         "user": os.environ.get("POSTGRES_USER", "eda_user"),
         "password": os.environ.get("POSTGRES_PASSWORD", "eda_password"),
     }
+    yield params
+    # Clean up the generated H2 directory after the test
+    if generated_h2_dir and os.path.isdir(generated_h2_dir):
+        shutil.rmtree(generated_h2_dir, ignore_errors=True)
 
 
 @pytest.fixture

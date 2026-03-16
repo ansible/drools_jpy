@@ -3,8 +3,8 @@ See tests/README_HA_TESTS.md for more details.
 ## How to run with H2 (file-backed, default)
 
 1. Build drools_jpy (`source venv/bin/activate`, `python3.9 -m pip install .`)
-2. `rm -f ./eda_ha.mv.db; python3.9 -m pytest tests/test_ha.py -s --log-cli-level=DEBUG` -> All tests should pass.
-3. You may delete the db file afterward if desired. `rm ./eda_ha.mv.db`
+2. `python3.9 -m pytest tests/test_ha.py -s --log-cli-level=DEBUG` -> All tests should pass.
+3. DB files are created under `target` directory. They should be automatically cleaned up after each test.
 
 ## How to run with PostgreSQL
 

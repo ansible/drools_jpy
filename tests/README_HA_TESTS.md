@@ -62,7 +62,7 @@ The test runs with H2 file-backed database by default. No external database need
 python3.9 -m pytest tests/test_ha.py -v
 ```
 
-After the tests, you may delete the `./eda_ha.mv.db` file if desired.
+DB files are created under `target` directory. They should be automatically cleaned up after each test.
 
 ### Run All HA Tests with PostgreSQL database
 

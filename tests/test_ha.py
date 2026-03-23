@@ -2460,3 +2460,146 @@ async def test_ha_all_timeout_expired_during_outage(db_params):
     # Final cleanup
     if RulesetCollection.engine is not None:
         shutdown()
+
+
+@pytest.mark.asyncio
+async def test_ha_overwrite_if_rulebook_changes(db_params):
+    """Test overwrite_if_rulebook_changes=false on same node.
+
+    V1 ruleset: AllCondition requiring events i AND j.
+    V2 ruleset: AllCondition requiring events i AND k
+    (same ruleset name, different conditions).
+
+    Single node starts with V1, sends event i (partial match),
+    disposes the session, then creates a new session with V2.
+    With overwrite_if_rulebook_changes=false, the partial event i
+    from V1 is recovered despite the rulebook hash mismatch.
+    Sending event k completes the V2 rule.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    ha_config = {"overwrite_if_rulebook_changes": False}
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    v1_data = load_ast("asts/test_ruleset_update_v1_ast.yml")
+    v1_ruleset = v1_data[0]["RuleSet"]
+
+    v2_data = load_ast("asts/test_ruleset_update_v2_ast.yml")
+    v2_ruleset = v2_data[0]["RuleSet"]
+
+    rule_name = "r1"
+
+    # --- Phase 1: V1 ruleset, send event i (partial) ---
+    reader1, writer1 = await establish_async_channel()
+    async_task1 = asyncio.create_task(
+        handle_async_messages(reader1, writer1)
+    )
+
+    try:
+        initialize_ha(
+            ha_uuid, "worker-1", db_params, ha_config
+        )
+
+        my_callback1 = mock.Mock()
+        rs1 = Ruleset(
+            name=v1_ruleset["name"],
+            serialized_ruleset=json.dumps(v1_ruleset),
+            ha_enabled=True,
+        )
+        rs1.add_rule(Rule(rule_name, my_callback1))
+
+        enable_leader()
+        print("Phase 1: Leader with V1 ruleset")
+
+        # Send event i — partial match (V1 needs i AND j)
+        rs1.assert_event(json.dumps(dict(i=42, host="A")))
+        print("Sent event {i: 42}")
+
+        await asyncio.sleep(0.5)
+
+        assert not my_callback1.called, (
+            "Rule should not fire with partial match"
+        )
+        print("Confirmed: rule did not fire (partial)")
+
+        # Dispose V1 session (keeps persisted state in DB)
+        rs1.end_session()
+        print("V1 session disposed")
+
+        # --- Phase 2: Create V2 ruleset on same node ---
+        captured_matches = []
+
+        def capture_callback(matches):
+            captured_matches.append(matches)
+
+        my_callback2 = mock.Mock(
+            side_effect=capture_callback
+        )
+        rs2 = Ruleset(
+            name=v2_ruleset["name"],
+            serialized_ruleset=json.dumps(v2_ruleset),
+            ha_enabled=True,
+        )
+        rs2.add_rule(Rule(rule_name, my_callback2))
+
+        print(
+            "Phase 2: Created V2 ruleset "
+            "(overwrite_if_rulebook_changes=false)"
+        )
+
+        # Wait for recovery of partial event i from V1
+        await asyncio.sleep(0.5)
+
+        # Rule should NOT have fired yet (only i recovered,
+        # V2 needs i AND k)
+        assert not my_callback2.called, (
+            "Rule should not fire with only recovered "
+            "partial event i"
+        )
+        print("Confirmed: rule did not fire yet")
+
+        # Send event k — completes V2 AllCondition
+        rs2.assert_event(json.dumps(dict(k=99, host="B")))
+        print("Sent event {k: 99}")
+
+        await asyncio.sleep(0.5)
+
+        # Rule should fire: recovered i from V1 + new k
+        assert my_callback2.called, (
+            "Rule should fire — recovered i from V1 "
+            "and new k complete V2 AllCondition"
+        )
+        assert len(captured_matches) > 0
+        print(
+            f"Rule fired! "
+            f"matching_uuid: "
+            f"{captured_matches[0].matching_uuid}"
+        )
+
+        match_data = captured_matches[0].data
+        print(f"Match data: {match_data}")
+
+        # Verify match contains event i from V1 recovery
+        assert "m_0" in match_data
+        assert match_data["m_0"]["i"] == 42
+
+        # Clean up
+        matching_uuid = captured_matches[0].matching_uuid
+        if matching_uuid:
+            delete_action_info(
+                v2_ruleset["name"], matching_uuid
+            )
+        disable_leader()
+        rs2.end_session()
+        print("Cleaned up")
+    finally:
+        if not async_task1.done():
+            async_task1.cancel()
+            try:
+                await async_task1
+            except asyncio.CancelledError:
+                pass
+
+    # Final cleanup
+    if RulesetCollection.engine is not None:
+        shutdown()

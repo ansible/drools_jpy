@@ -23,9 +23,7 @@ async def establish_async_channel():
     logger.debug("Establishing async channel")
     port = RulesetCollection.response_port()
     try:
-        logger.debug("+++ open_connection start : %s", port)
         reader, writer = await asyncio.open_connection("localhost", port)
-        logger.debug("+++ open_connection done")
         return reader, writer
     except OSError as e:
         logger.error("Async channel connect failed to localhost:%s: %s", port, e)

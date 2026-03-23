@@ -247,45 +247,42 @@ class Ruleset:
             rule_name = rule_match["name"]
             events_data = rule_match["events"]
             matching_uuid = rule_match.get("matching_uuid")
-            type = rule_match.get("type")
+            match_type = rule_match.get("type")
 
-            # Do something special for recovery
-            if type and type == "MATCHING_EVENT_RECOVERY":
+            if match_type == "MATCHING_EVENT_RECOVERY":
                 logger.debug(
-                    "Recovering matching event for rule : "
-                    + rule_name
-                    + " in session: "
-                    + str(self._session_id)
-                    + (f" with matching_uuid: {matching_uuid}" if matching_uuid else "")
+                    "Recovering matching event for rule %s "
+                    "in session %s, matching_uuid=%s",
+                    rule_name, self._session_id, matching_uuid,
                 )
 
             if rule_name in self._rules:
                 logger.debug(
-                    "Calling rule : "
-                    + rule_name
-                    + " in session: "
-                    + str(self._session_id)
-                    + (f" with matching_uuid: {matching_uuid}" if matching_uuid else "")
+                    "Calling rule %s in session %s, "
+                    "matching_uuid=%s",
+                    rule_name, self._session_id, matching_uuid,
                 )
-                self._rules[rule_name].callback(Matches(data=events_data, matching_uuid=matching_uuid))
+                self._rules[rule_name].callback(
+                    Matches(data=events_data, matching_uuid=matching_uuid)
+                )
             else:
                 raise RuleNotFoundError(
-                    "Rule " + rule_name + " does not exist in Ruleset " + self.name
+                    f"Rule {rule_name} does not exist "
+                    f"in Ruleset {self.name}"
                 )
         else:
             # Legacy format: iterate over items
             for name, value in rule_match.items():
                 if name in self._rules:
                     logger.debug(
-                        "Calling rule : "
-                        + name
-                        + " in session: "
-                        + str(self._session_id)
+                        "Calling rule %s in session %s",
+                        name, self._session_id,
                     )
                     self._rules[name].callback(Matches(data=value))
                 else:
                     raise RuleNotFoundError(
-                        "Rule " + name + " does not exist in Ruleset " + self.name
+                        f"Rule {name} does not exist "
+                        f"in Ruleset {self.name}"
                     )
 
 

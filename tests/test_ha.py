@@ -2603,3 +2603,108 @@ async def test_ha_overwrite_if_rulebook_changes(db_params):
     # Final cleanup
     if RulesetCollection.engine is not None:
         shutdown()
+
+
+@pytest.mark.asyncio
+async def test_ha_postgres_multi_host(db_params):
+    """Test PostgreSQL multi-host connection support.
+
+    Uses two host:port pairs where the first one is
+    unreachable (dead port). The JDBC driver should fail
+    on the first host and seamlessly connect to the second.
+    Just running successfully confirms multi-host failover.
+
+    Skipped when using H2.
+    """
+
+    if db_params["db_type"] != "postgres":
+        pytest.skip("Multi-host test requires PostgreSQL")
+
+    ha_uuid = str(uuid.uuid4())
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    real_host = db_params["host"]
+    real_port = str(db_params["port"])
+
+    # Build multi-host params: first host is unreachable,
+    # second is the real PostgreSQL instance
+    multi_host_params = dict(db_params)
+    multi_host_params["host"] = (
+        f"{real_host},{real_host}"
+    )
+    multi_host_params["port"] = (
+        f"59999,{real_port}"
+    )
+
+    test_data = load_ast("asts/rules_with_assignment.yml")
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "assignment"
+
+    reader, writer = await establish_async_channel()
+    async_task = asyncio.create_task(
+        handle_async_messages(reader, writer)
+    )
+
+    try:
+        initialize_ha(
+            ha_uuid, "worker-1", multi_host_params, {}
+        )
+
+        captured_matches = []
+
+        def capture_callback(matches):
+            captured_matches.append(matches)
+
+        my_callback = mock.Mock(
+            side_effect=capture_callback
+        )
+        rs = Ruleset(
+            name=ruleset_data["name"],
+            serialized_ruleset=json.dumps(ruleset_data),
+            ha_enabled=True,
+        )
+        rs.add_rule(Rule(rule_name, my_callback))
+
+        enable_leader()
+        print(
+            "Leader enabled with multi-host "
+            f"(dead:59999, live:{real_port})"
+        )
+
+        # Send an event that matches the rule
+        rs.assert_event(json.dumps(dict(i=67)))
+        print("Sent event {i: 67}")
+
+        await asyncio.sleep(0.5)
+
+        # Rule should fire — confirms DB connection worked
+        assert my_callback.called, (
+            "Rule should fire — multi-host connection "
+            "should have failed over to the second host"
+        )
+        assert len(captured_matches) > 0
+        print(
+            f"Rule fired! matching_uuid: "
+            f"{captured_matches[0].matching_uuid}"
+        )
+
+        # Clean up
+        matching_uuid = captured_matches[0].matching_uuid
+        if matching_uuid:
+            delete_action_info(
+                ruleset_data["name"], matching_uuid
+            )
+        disable_leader()
+        rs.end_session()
+        print("Multi-host test passed")
+    finally:
+        if not async_task.done():
+            async_task.cancel()
+            try:
+                await async_task
+            except asyncio.CancelledError:
+                pass
+
+    # Final cleanup
+    if RulesetCollection.engine is not None:
+        shutdown()

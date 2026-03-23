@@ -311,8 +311,9 @@ class RulesetCollection:
 
     @classmethod
     def shutdown(cls):
-        cls.engine.shutdown()
-        cls.engine = None
+        if cls.engine is not None:
+            cls.engine.shutdown()
+            cls.engine = None
 
     @classmethod
     def initialize_ha(cls, uuid: str, worker_name: str, db_params: dict, config: dict = None):

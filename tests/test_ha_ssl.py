@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import secrets
 import uuid
 from unittest import mock
 
@@ -53,7 +54,7 @@ def db_params():
         "port": int(os.environ.get("POSTGRES_PORT", "5433")),
         "database": os.environ.get("POSTGRES_DB", "eda_ha_db"),
         "user": os.environ.get("POSTGRES_USER", "eda_user"),
-        "password": os.environ.get("POSTGRES_PASSWORD", "eda_password"),
+        "password": os.environ.get("POSTGRES_PASSWORD", secrets.token_hex(8)),
         "sslmode": os.environ.get("POSTGRES_SSLMODE", "verify-full"),
         "sslrootcert": os.environ.get(
             "POSTGRES_SSLROOTCERT",
@@ -68,7 +69,7 @@ def db_params():
             os.path.join(_SSL_CERTS_DIR, "client.key"),
         ),
         "sslpassword": os.environ.get(
-            "POSTGRES_SSLPASSWORD", "testpassphrase"
+            "POSTGRES_SSLPASSWORD", secrets.token_hex(8)
         ),
     }
 
@@ -121,12 +122,9 @@ async def test_ha_ssl_basic(db_params):
         assert isinstance(ha_stats, dict)
 
         # 4. Assert an event that fires the rule
-        rs.assert_event(json.dumps(dict(i=67)))
+        rs.assert_event(json.dumps({"i": 67}))
 
-        try:
-            await async_task
-        except asyncio.CancelledError:
-            pass
+        await async_task
 
         # 5. Verify the rule fired
         assert my_callback.called
@@ -150,7 +148,4 @@ async def test_ha_ssl_basic(db_params):
     finally:
         if not async_task.done():
             async_task.cancel()
-            try:
-                await async_task
-            except asyncio.CancelledError:
-                pass
+            await async_task

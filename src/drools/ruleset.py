@@ -5,7 +5,7 @@ import logging
 import os
 import tempfile
 from dataclasses import dataclass, field
-from typing import ClassVar, Dict, List
+from typing import ClassVar, Dict, List, Optional
 
 import jpyutil
 
@@ -121,7 +121,7 @@ def _from_json(obj):
 @dataclass(frozen=True)
 class Matches:
     data: dict = None
-    matching_uuid: str = None
+    matching_uuid: Optional[str] = None
 
 
 @dataclass
@@ -267,7 +267,7 @@ class Ruleset:
 
             if rule_name in self._rules:
                 logger.debug(
-                    "Calling rule %s in session %s, " "matching_uuid=%s",
+                    "Calling rule %s in session %s, matching_uuid=%s",
                     rule_name,
                     self._session_id,
                     matching_uuid,

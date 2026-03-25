@@ -7,23 +7,18 @@ from unittest import mock
 import pytest
 import yaml
 
-from drools.dispatch import (
-    establish_async_channel,
-    handle_async_messages,
-)
+from drools.dispatch import establish_async_channel, handle_async_messages
 from drools.rule import Rule
 from drools.ruleset import (
     Ruleset,
-    RulesetCollection,
-    initialize_ha,
-    enable_leader,
-    disable_leader,
-    get_ha_stats,
-    add_action_info,
-    get_action_info,
     action_info_exists,
+    add_action_info,
     delete_action_info,
-    shutdown,
+    disable_leader,
+    enable_leader,
+    get_action_info,
+    get_ha_stats,
+    initialize_ha,
 )
 
 
@@ -59,9 +54,7 @@ def db_params():
         "database": os.environ.get("POSTGRES_DB", "eda_ha_db"),
         "user": os.environ.get("POSTGRES_USER", "eda_user"),
         "password": os.environ.get("POSTGRES_PASSWORD", "eda_password"),
-        "sslmode": os.environ.get(
-            "POSTGRES_SSLMODE", "verify-full"
-        ),
+        "sslmode": os.environ.get("POSTGRES_SSLMODE", "verify-full"),
         "sslrootcert": os.environ.get(
             "POSTGRES_SSLROOTCERT",
             os.path.join(_SSL_CERTS_DIR, "ca.crt"),
@@ -84,10 +77,17 @@ def db_params():
 async def test_ha_ssl_basic(db_params):
     """Test HA initialization and rule firing over SSL PostgreSQL."""
 
+    # Skip if SSL certificates don't exist
+    if not os.path.exists(db_params["sslcert"]) or not os.path.exists(
+        db_params["sslkey"]
+    ):
+        pytest.skip(
+            "SSL certificates not found. "
+            "Run tests/ssl-certs/generate-certs.sh to generate them."
+        )
+
     reader, writer = await establish_async_channel()
-    async_task = asyncio.create_task(
-        handle_async_messages(reader, writer)
-    )
+    async_task = asyncio.create_task(handle_async_messages(reader, writer))
 
     try:
         # 1. Initialize HA with SSL db_params
@@ -136,18 +136,10 @@ async def test_ha_ssl_basic(db_params):
         assert matching_uuid is not None
 
         # 6. Verify action persistence over SSL
-        action_data = json.dumps(
-            {"action": "print_event", "status": "1"}
-        )
-        add_action_info(
-            ruleset_data["name"], matching_uuid, 0, action_data
-        )
-        assert action_info_exists(
-            ruleset_data["name"], matching_uuid, 0
-        )
-        retrieved = get_action_info(
-            ruleset_data["name"], matching_uuid, 0
-        )
+        action_data = json.dumps({"action": "print_event", "status": "1"})
+        add_action_info(ruleset_data["name"], matching_uuid, 0, action_data)
+        assert action_info_exists(ruleset_data["name"], matching_uuid, 0)
+        retrieved = get_action_info(ruleset_data["name"], matching_uuid, 0)
         assert retrieved == action_data
 
         delete_action_info(ruleset_data["name"], matching_uuid)

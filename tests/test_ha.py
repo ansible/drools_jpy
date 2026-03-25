@@ -9,10 +9,7 @@ from unittest import mock
 import pytest
 import yaml
 
-from drools.dispatch import (
-    establish_async_channel,
-    handle_async_messages,
-)
+from drools.dispatch import establish_async_channel, handle_async_messages
 from drools.rule import Rule
 from drools.ruleset import (
     Ruleset,
@@ -77,7 +74,7 @@ def ha_config():
     """HA configuration parameters"""
     return {
         "write_after": 1,  # not yet implemented
-        "dedup_buffer_size": 5, # default is 5
+        "dedup_buffer_size": 5,  # default is 5
     }
 
 
@@ -1027,7 +1024,9 @@ async def test_ha_failover_once_after(db_params):
 
 
 @pytest.mark.asyncio
-async def test_ha_duplicate_event_detection_survives_failover(db_params, ha_config):
+async def test_ha_duplicate_event_detection_survives_failover(
+    db_params, ha_config
+):
     """Test duplicate event detection surviving a failover.
 
     Worker-1 processes an event with a specific UUID (temperature > 30),
@@ -1357,22 +1356,16 @@ async def test_ha_once_after_grace_period(db_params):
     ha_config = {"expired_window_grace_period": 600}
     print(f"HA Cluster UUID: {ha_uuid}")
 
-    test_data = load_ast(
-        "asts/test_once_after_grace_period_ast.yml"
-    )
+    test_data = load_ast("asts/test_once_after_grace_period_ast.yml")
     ruleset_data = test_data[0]["RuleSet"]
     rule_name = "alert_throttle"
 
     # --- Worker 1: send event, advance to T=8s, go down ---
     reader1, writer1 = await establish_async_channel()
-    async_task1 = asyncio.create_task(
-        handle_async_messages(reader1, writer1)
-    )
+    async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
 
     try:
-        initialize_ha(
-            ha_uuid, "worker-1", db_params, ha_config
-        )
+        initialize_ha(ha_uuid, "worker-1", db_params, ha_config)
 
         my_callback1 = mock.Mock()
         rs1 = Ruleset(
@@ -1387,9 +1380,7 @@ async def test_ha_once_after_grace_period(db_params):
 
         # Send event at T=0
         rs1.assert_event(
-            json.dumps(
-                {"alert": {"type": "warning", "host": "h1"}}
-            )
+            json.dumps({"alert": {"type": "warning", "host": "h1"}})
         )
         print("worker-1 sent alert event")
 
@@ -1402,8 +1393,7 @@ async def test_ha_once_after_grace_period(db_params):
 
         # Rule should NOT have fired yet
         assert not my_callback1.called, (
-            "Rule should not fire before "
-            "once_after window expires"
+            "Rule should not fire before " "once_after window expires"
         )
         print("Confirmed: rule did not fire on worker-1")
 
@@ -1427,23 +1417,17 @@ async def test_ha_once_after_grace_period(db_params):
 
     # --- Worker 2: advance to T=15s, then take over ---
     reader2, writer2 = await establish_async_channel()
-    async_task2 = asyncio.create_task(
-        handle_async_messages(reader2, writer2)
-    )
+    async_task2 = asyncio.create_task(handle_async_messages(reader2, writer2))
 
     try:
-        initialize_ha(
-            ha_uuid, "worker-2", db_params, ha_config
-        )
+        initialize_ha(ha_uuid, "worker-2", db_params, ha_config)
 
         captured_matches = []
 
         def capture_callback(matches):
             captured_matches.append(matches)
 
-        my_callback2 = mock.Mock(
-            side_effect=capture_callback
-        )
+        my_callback2 = mock.Mock(side_effect=capture_callback)
         rs2 = Ruleset(
             name=ruleset_data["name"],
             serialized_ruleset=json.dumps(ruleset_data),
@@ -1471,8 +1455,7 @@ async def test_ha_once_after_grace_period(db_params):
 
         # The match should have been dispatched
         assert my_callback2.called, (
-            "Grace period match should be dispatched "
-            "via async channel"
+            "Grace period match should be dispatched " "via async channel"
         )
         assert len(captured_matches) > 0
         print(
@@ -1487,17 +1470,14 @@ async def test_ha_once_after_grace_period(db_params):
         rs2.advance_time(5, "Seconds")
         await asyncio.sleep(0.5)
         assert len(captured_matches) == initial_count, (
-            "No duplicate match should fire "
-            "after grace period recovery"
+            "No duplicate match should fire " "after grace period recovery"
         )
         print("Confirmed: no duplicate match")
 
         # Clean up
         matching_uuid = captured_matches[0].matching_uuid
         if matching_uuid:
-            delete_action_info(
-                ruleset_data["name"], matching_uuid
-            )
+            delete_action_info(ruleset_data["name"], matching_uuid)
         disable_leader()
         rs2.end_session()
         print("worker-2 cleaned up")
@@ -1524,22 +1504,16 @@ async def test_ha_timed_out_grace_period(db_params):
     ha_config = {"expired_window_grace_period": 600}
     print(f"HA Cluster UUID: {ha_uuid}")
 
-    test_data = load_ast(
-        "asts/test_not_all_grace_period_ast.yml"
-    )
+    test_data = load_ast("asts/test_not_all_grace_period_ast.yml")
     ruleset_data = test_data[0]["RuleSet"]
     rule_name = "maint failed"
 
     # --- Worker 1: send partial match, advance to T=8s ---
     reader1, writer1 = await establish_async_channel()
-    async_task1 = asyncio.create_task(
-        handle_async_messages(reader1, writer1)
-    )
+    async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
 
     try:
-        initialize_ha(
-            ha_uuid, "worker-1", db_params, ha_config
-        )
+        initialize_ha(ha_uuid, "worker-1", db_params, ha_config)
 
         my_callback1 = mock.Mock()
         rs1 = Ruleset(
@@ -1574,9 +1548,9 @@ async def test_ha_timed_out_grace_period(db_params):
 
         # Rule should NOT have fired (timeout not expired
         # and code=1002 could still arrive)
-        assert not my_callback1.called, (
-            "Rule should not fire before timeout expires"
-        )
+        assert (
+            not my_callback1.called
+        ), "Rule should not fire before timeout expires"
         print("Confirmed: rule did not fire on worker-1")
 
         # Worker 1 goes down
@@ -1599,23 +1573,17 @@ async def test_ha_timed_out_grace_period(db_params):
 
     # --- Worker 2: advance to T=15s, then take over ---
     reader2, writer2 = await establish_async_channel()
-    async_task2 = asyncio.create_task(
-        handle_async_messages(reader2, writer2)
-    )
+    async_task2 = asyncio.create_task(handle_async_messages(reader2, writer2))
 
     try:
-        initialize_ha(
-            ha_uuid, "worker-2", db_params, ha_config
-        )
+        initialize_ha(ha_uuid, "worker-2", db_params, ha_config)
 
         captured_matches = []
 
         def capture_callback(matches):
             captured_matches.append(matches)
 
-        my_callback2 = mock.Mock(
-            side_effect=capture_callback
-        )
+        my_callback2 = mock.Mock(side_effect=capture_callback)
         rs2 = Ruleset(
             name=ruleset_data["name"],
             serialized_ruleset=json.dumps(ruleset_data),
@@ -1643,8 +1611,7 @@ async def test_ha_timed_out_grace_period(db_params):
 
         # The match should have been dispatched
         assert my_callback2.called, (
-            "Grace period match should be dispatched "
-            "via async channel"
+            "Grace period match should be dispatched " "via async channel"
         )
         assert len(captured_matches) > 0
         print(
@@ -1659,17 +1626,14 @@ async def test_ha_timed_out_grace_period(db_params):
         rs2.advance_time(5, "Seconds")
         await asyncio.sleep(0.5)
         assert len(captured_matches) == initial_count, (
-            "No duplicate match should fire "
-            "after grace period recovery"
+            "No duplicate match should fire " "after grace period recovery"
         )
         print("Confirmed: no duplicate match")
 
         # Clean up
         matching_uuid = captured_matches[0].matching_uuid
         if matching_uuid:
-            delete_action_info(
-                ruleset_data["name"], matching_uuid
-            )
+            delete_action_info(ruleset_data["name"], matching_uuid)
         disable_leader()
         rs2.end_session()
         print("worker-2 cleaned up")
@@ -1701,9 +1665,7 @@ def _query_raw_column(db_params, sql, *param_values):
     db_type = db_params.get("db_type", "h2")
     if db_type == "h2":
         db_file = db_params.get("db_file_path", "./eda_ha")
-        jdbc_url = (
-            f"jdbc:h2:file:{db_file};MODE=PostgreSQL"
-        )
+        jdbc_url = f"jdbc:h2:file:{db_file};MODE=PostgreSQL"
         conn = DriverManager.getConnection(jdbc_url, "SA", "")
     else:
         host = db_params.get("host", "localhost")
@@ -1711,12 +1673,8 @@ def _query_raw_column(db_params, sql, *param_values):
         database = db_params.get("database", "eda_ha_db")
         user = db_params.get("user", "eda_user")
         password = db_params.get("password", "eda_password")
-        jdbc_url = (
-            f"jdbc:postgresql://{host}:{port}/{database}"
-        )
-        conn = DriverManager.getConnection(
-            jdbc_url, user, password
-        )
+        jdbc_url = f"jdbc:postgresql://{host}:{port}/{database}"
+        conn = DriverManager.getConnection(jdbc_url, user, password)
 
     try:
         stmt = conn.prepareStatement(sql)
@@ -1754,9 +1712,7 @@ async def test_ha_encryption_failover(db_params):
 
     # --- Worker 1: fire rule with encryption, then go down ---
     reader1, writer1 = await establish_async_channel()
-    async_task1 = asyncio.create_task(
-        handle_async_messages(reader1, writer1)
-    )
+    async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
 
     try:
         initialize_ha(ha_uuid, "worker-1", db_params, enc_ha_config)
@@ -1795,21 +1751,12 @@ async def test_ha_encryption_failover(db_params):
         assert (
             matching_uuid is not None
         ), "matching_uuid should be present in HA mode"
-        print(
-            f"Rule fired on worker-1! "
-            f"matching_uuid: {matching_uuid}"
-        )
+        print(f"Rule fired on worker-1! " f"matching_uuid: {matching_uuid}")
 
         # Add action info (persisted with encryption)
-        action_data = json.dumps(
-            {"action": "print_event", "status": "1"}
-        )
-        add_action_info(
-            ruleset_data["name"], matching_uuid, 0, action_data
-        )
-        assert action_info_exists(
-            ruleset_data["name"], matching_uuid, 0
-        )
+        action_data = json.dumps({"action": "print_event", "status": "1"})
+        add_action_info(ruleset_data["name"], matching_uuid, 0, action_data)
+        assert action_info_exists(ruleset_data["name"], matching_uuid, 0)
         print("worker-1 added action info (encrypted)")
 
         # Verify raw DB columns are encrypted
@@ -1820,16 +1767,12 @@ async def test_ha_encryption_failover(db_params):
             "WHERE ha_uuid = ?",
             ha_uuid,
         )
-        assert raw_event_data is not None, (
-            "matching_event row should exist"
-        )
+        assert raw_event_data is not None, "matching_event row should exist"
         assert raw_event_data.startswith("$ENCRYPTED$"), (
-            f"event_data should be encrypted, "
-            f"got: {raw_event_data[:50]}"
+            f"event_data should be encrypted, " f"got: {raw_event_data[:50]}"
         )
         print(
-            f"Verified: event_data is encrypted "
-            f"({raw_event_data[:30]}...)"
+            f"Verified: event_data is encrypted " f"({raw_event_data[:30]}...)"
         )
 
         raw_session_state = _query_raw_column(
@@ -1839,9 +1782,7 @@ async def test_ha_encryption_failover(db_params):
             "WHERE ha_uuid = ?",
             ha_uuid,
         )
-        assert raw_session_state is not None, (
-            "session_state row should exist"
-        )
+        assert raw_session_state is not None, "session_state row should exist"
         assert raw_session_state.startswith("$ENCRYPTED$"), (
             f"partial_matching_events should be encrypted, "
             f"got: {raw_session_state[:50]}"
@@ -1871,9 +1812,7 @@ async def test_ha_encryption_failover(db_params):
 
     # --- Worker 2: take over with same encryption key ---
     reader2, writer2 = await establish_async_channel()
-    async_task2 = asyncio.create_task(
-        handle_async_messages(reader2, writer2)
-    )
+    async_task2 = asyncio.create_task(handle_async_messages(reader2, writer2))
 
     try:
         initialize_ha(ha_uuid, "worker-2", db_params, enc_ha_config)
@@ -1898,16 +1837,11 @@ async def test_ha_encryption_failover(db_params):
 
         # Worker-2 should be able to read action info
         # created by worker-1 (encrypted in DB)
-        assert action_info_exists(
-            ruleset_data["name"], matching_uuid, 0
-        )
-        retrieved = get_action_info(
-            ruleset_data["name"], matching_uuid, 0
-        )
+        assert action_info_exists(ruleset_data["name"], matching_uuid, 0)
+        retrieved = get_action_info(ruleset_data["name"], matching_uuid, 0)
         assert retrieved == action_data
         print(
-            "worker-2 successfully read encrypted "
-            "action info from worker-1"
+            "worker-2 successfully read encrypted " "action info from worker-1"
         )
 
         # Clean up
@@ -1956,14 +1890,10 @@ async def test_ha_key_rotation_with_restart(db_params):
 
     # === Phase 1: Worker-1 as leader with original key ===
     reader1, writer1 = await establish_async_channel()
-    async_task1 = asyncio.create_task(
-        handle_async_messages(reader1, writer1)
-    )
+    async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
 
     try:
-        initialize_ha(
-            ha_uuid, "worker-1", db_params, original_ha_config
-        )
+        initialize_ha(ha_uuid, "worker-1", db_params, original_ha_config)
 
         captured_matches = []
 
@@ -1999,10 +1929,7 @@ async def test_ha_key_rotation_with_restart(db_params):
         assert (
             matching_uuid is not None
         ), "matching_uuid should be present in HA mode"
-        print(
-            f"Rule fired on worker-1! "
-            f"matching_uuid: {matching_uuid}"
-        )
+        print(f"Rule fired on worker-1! " f"matching_uuid: {matching_uuid}")
 
         # Verify raw DB column is encrypted with original key
         raw_event_data = _query_raw_column(
@@ -2012,16 +1939,12 @@ async def test_ha_key_rotation_with_restart(db_params):
             "WHERE ha_uuid = ?",
             ha_uuid,
         )
-        assert raw_event_data is not None, (
-            "matching_event row should exist"
-        )
+        assert raw_event_data is not None, "matching_event row should exist"
         assert raw_event_data.startswith("$ENCRYPTED$"), (
-            f"event_data should be encrypted, "
-            f"got: {raw_event_data[:50]}"
+            f"event_data should be encrypted, " f"got: {raw_event_data[:50]}"
         )
         print(
-            f"Verified: event_data is encrypted "
-            f"({raw_event_data[:30]}...)"
+            f"Verified: event_data is encrypted " f"({raw_event_data[:30]}...)"
         )
 
         # Shut down worker-1 (graceful restart)
@@ -2049,9 +1972,7 @@ async def test_ha_key_rotation_with_restart(db_params):
     }
 
     reader2, writer2 = await establish_async_channel()
-    async_task2 = asyncio.create_task(
-        handle_async_messages(reader2, writer2)
-    )
+    async_task2 = asyncio.create_task(handle_async_messages(reader2, writer2))
 
     try:
         initialize_ha(
@@ -2079,8 +2000,7 @@ async def test_ha_key_rotation_with_restart(db_params):
 
         enable_leader()
         print(
-            "worker-1-rotated became a Leader "
-            "(new primary + old secondary)"
+            "worker-1-rotated became a Leader " "(new primary + old secondary)"
         )
 
         # Wait for recovery — should decrypt with secondary key
@@ -2105,9 +2025,9 @@ async def test_ha_key_rotation_with_restart(db_params):
             ha_uuid,
             ruleset_data["name"],
         )
-        assert raw_session_state is not None, (
-            "session_state row should exist after re-encryption"
-        )
+        assert (
+            raw_session_state is not None
+        ), "session_state row should exist after re-encryption"
         assert raw_session_state.startswith("$ENCRYPTED$"), (
             f"session_state should be encrypted, "
             f"got: {raw_session_state[:50]}"
@@ -2122,22 +2042,17 @@ async def test_ha_key_rotation_with_restart(db_params):
         import jpy
 
         HAEncryption = jpy.get_type(
-            "org.drools.ansible.rulebook.integration"
-            ".ha.api.HAEncryption"
+            "org.drools.ansible.rulebook.integration" ".ha.api.HAEncryption"
         )
         rotated_only = HAEncryption(new_key, None)
         decrypt_result = rotated_only.decrypt(raw_session_state)
         assert not decrypt_result.usedSecondaryKey(), (
-            "Should decrypt with primary (new) key, "
-            "not secondary"
+            "Should decrypt with primary (new) key, " "not secondary"
         )
-        assert decrypt_result.plaintext() is not None, (
-            "Decrypted session state should not be None"
-        )
-        print(
-            "Verified: session state re-encrypted "
-            "with new primary key"
-        )
+        assert (
+            decrypt_result.plaintext() is not None
+        ), "Decrypted session state should not be None"
+        print("Verified: session state re-encrypted " "with new primary key")
 
         # Clean up
         disable_leader()
@@ -2179,9 +2094,7 @@ async def test_ha_get_partial_event_ids_survives_failover(
 
     # --- Worker 1: send partial events ---
     reader1, writer1 = await establish_async_channel()
-    async_task1 = asyncio.create_task(
-        handle_async_messages(reader1, writer1)
-    )
+    async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
 
     event_uuid1 = str(uuid.uuid4())
     event_uuid2 = str(uuid.uuid4())
@@ -2202,12 +2115,8 @@ async def test_ha_get_partial_event_ids_survives_failover(
 
         # Send two events satisfying only the first condition
         # (i==0) with explicit UUIDs via meta
-        event1 = json.dumps(
-            {"meta": {"uuid": event_uuid1}, "i": 0}
-        )
-        event2 = json.dumps(
-            {"meta": {"uuid": event_uuid2}, "i": 0}
-        )
+        event1 = json.dumps({"meta": {"uuid": event_uuid1}, "i": 0})
+        event2 = json.dumps({"meta": {"uuid": event_uuid2}, "i": 0})
         rs1.assert_event(event1)
         rs1.assert_event(event2)
         print("worker-1 sent two partial events")
@@ -2216,14 +2125,11 @@ async def test_ha_get_partial_event_ids_survives_failover(
 
         # Rule should not have fired
         assert not my_callback1.called, (
-            "Rule should not fire with only one "
-            "condition matched"
+            "Rule should not fire with only one " "condition matched"
         )
 
         # Verify partial event IDs on worker-1
-        partial_ids = get_partial_event_ids(
-            ruleset_data["name"]
-        )
+        partial_ids = get_partial_event_ids(ruleset_data["name"])
         print(f"Partial event IDs on worker-1: {partial_ids}")
         assert len(partial_ids) == 2
         assert set(partial_ids) == {
@@ -2249,9 +2155,7 @@ async def test_ha_get_partial_event_ids_survives_failover(
 
     # --- Worker 2: takes over and verifies partial IDs ---
     reader2, writer2 = await establish_async_channel()
-    async_task2 = asyncio.create_task(
-        handle_async_messages(reader2, writer2)
-    )
+    async_task2 = asyncio.create_task(handle_async_messages(reader2, writer2))
 
     try:
         initialize_ha(ha_uuid, "worker-2", db_params, {})
@@ -2272,9 +2176,7 @@ async def test_ha_get_partial_event_ids_survives_failover(
         await asyncio.sleep(0.5)
 
         # Verify partial event IDs recovered on worker-2
-        partial_ids = get_partial_event_ids(
-            ruleset_data["name"]
-        )
+        partial_ids = get_partial_event_ids(ruleset_data["name"])
         print(
             f"Partial event IDs on worker-2 "
             f"(after failover): {partial_ids}"
@@ -2323,9 +2225,7 @@ async def test_ha_all_timeout_expired_during_outage(db_params):
 
     # --- Worker 1: send event i, advance to T=8s, go down ---
     reader1, writer1 = await establish_async_channel()
-    async_task1 = asyncio.create_task(
-        handle_async_messages(reader1, writer1)
-    )
+    async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
 
     try:
         initialize_ha(ha_uuid, "worker-1", db_params, {})
@@ -2353,9 +2253,9 @@ async def test_ha_all_timeout_expired_during_outage(db_params):
         print("worker-1 advanced time by 8 seconds")
 
         # Rule should NOT have fired (j hasn't arrived yet)
-        assert not my_callback1.called, (
-            "Rule should not fire with partial match"
-        )
+        assert (
+            not my_callback1.called
+        ), "Rule should not fire with partial match"
         print("Confirmed: rule did not fire on worker-1")
 
         # Worker 1 goes down
@@ -2378,9 +2278,7 @@ async def test_ha_all_timeout_expired_during_outage(db_params):
 
     # --- Worker 2: clock at T=15s (past 10s timeout), take over ---
     reader2, writer2 = await establish_async_channel()
-    async_task2 = asyncio.create_task(
-        handle_async_messages(reader2, writer2)
-    )
+    async_task2 = asyncio.create_task(handle_async_messages(reader2, writer2))
 
     try:
         initialize_ha(ha_uuid, "worker-2", db_params, {})
@@ -2390,9 +2288,7 @@ async def test_ha_all_timeout_expired_during_outage(db_params):
         def capture_callback(matches):
             captured_matches.append(matches)
 
-        my_callback2 = mock.Mock(
-            side_effect=capture_callback
-        )
+        my_callback2 = mock.Mock(side_effect=capture_callback)
         rs2 = Ruleset(
             name=ruleset_data["name"],
             serialized_ruleset=json.dumps(ruleset_data),
@@ -2438,12 +2334,9 @@ async def test_ha_all_timeout_expired_during_outage(db_params):
         await asyncio.sleep(0.5)
 
         assert len(captured_matches) == 0, (
-            "Rule should not fire — original time window "
-            "already expired"
+            "Rule should not fire — original time window " "already expired"
         )
-        print(
-            "Confirmed: late event j did not trigger rule"
-        )
+        print("Confirmed: late event j did not trigger rule")
 
         # Clean up
         disable_leader()
@@ -2491,14 +2384,10 @@ async def test_ha_overwrite_if_rulebook_changes(db_params):
 
     # --- Phase 1: V1 ruleset, send event i (partial) ---
     reader1, writer1 = await establish_async_channel()
-    async_task1 = asyncio.create_task(
-        handle_async_messages(reader1, writer1)
-    )
+    async_task1 = asyncio.create_task(handle_async_messages(reader1, writer1))
 
     try:
-        initialize_ha(
-            ha_uuid, "worker-1", db_params, ha_config
-        )
+        initialize_ha(ha_uuid, "worker-1", db_params, ha_config)
 
         my_callback1 = mock.Mock()
         rs1 = Ruleset(
@@ -2517,9 +2406,9 @@ async def test_ha_overwrite_if_rulebook_changes(db_params):
 
         await asyncio.sleep(0.5)
 
-        assert not my_callback1.called, (
-            "Rule should not fire with partial match"
-        )
+        assert (
+            not my_callback1.called
+        ), "Rule should not fire with partial match"
         print("Confirmed: rule did not fire (partial)")
 
         # Dispose V1 session (keeps persisted state in DB)
@@ -2532,9 +2421,7 @@ async def test_ha_overwrite_if_rulebook_changes(db_params):
         def capture_callback(matches):
             captured_matches.append(matches)
 
-        my_callback2 = mock.Mock(
-            side_effect=capture_callback
-        )
+        my_callback2 = mock.Mock(side_effect=capture_callback)
         rs2 = Ruleset(
             name=v2_ruleset["name"],
             serialized_ruleset=json.dumps(v2_ruleset),
@@ -2553,8 +2440,7 @@ async def test_ha_overwrite_if_rulebook_changes(db_params):
         # Rule should NOT have fired yet (only i recovered,
         # V2 needs i AND k)
         assert not my_callback2.called, (
-            "Rule should not fire with only recovered "
-            "partial event i"
+            "Rule should not fire with only recovered " "partial event i"
         )
         print("Confirmed: rule did not fire yet")
 
@@ -2586,9 +2472,7 @@ async def test_ha_overwrite_if_rulebook_changes(db_params):
         # Clean up
         matching_uuid = captured_matches[0].matching_uuid
         if matching_uuid:
-            delete_action_info(
-                v2_ruleset["name"], matching_uuid
-            )
+            delete_action_info(v2_ruleset["name"], matching_uuid)
         disable_leader()
         rs2.end_session()
         print("Cleaned up")
@@ -2629,35 +2513,25 @@ async def test_ha_postgres_multi_host(db_params):
     # Build multi-host params: first host is unreachable,
     # second is the real PostgreSQL instance
     multi_host_params = dict(db_params)
-    multi_host_params["host"] = (
-        f"{real_host},{real_host}"
-    )
-    multi_host_params["port"] = (
-        f"59999,{real_port}"
-    )
+    multi_host_params["host"] = f"{real_host},{real_host}"
+    multi_host_params["port"] = f"59999,{real_port}"
 
     test_data = load_ast("asts/rules_with_assignment.yml")
     ruleset_data = test_data[0]["RuleSet"]
     rule_name = "assignment"
 
     reader, writer = await establish_async_channel()
-    async_task = asyncio.create_task(
-        handle_async_messages(reader, writer)
-    )
+    async_task = asyncio.create_task(handle_async_messages(reader, writer))
 
     try:
-        initialize_ha(
-            ha_uuid, "worker-1", multi_host_params, {}
-        )
+        initialize_ha(ha_uuid, "worker-1", multi_host_params, {})
 
         captured_matches = []
 
         def capture_callback(matches):
             captured_matches.append(matches)
 
-        my_callback = mock.Mock(
-            side_effect=capture_callback
-        )
+        my_callback = mock.Mock(side_effect=capture_callback)
         rs = Ruleset(
             name=ruleset_data["name"],
             serialized_ruleset=json.dumps(ruleset_data),
@@ -2667,8 +2541,7 @@ async def test_ha_postgres_multi_host(db_params):
 
         enable_leader()
         print(
-            "Leader enabled with multi-host "
-            f"(dead:59999, live:{real_port})"
+            "Leader enabled with multi-host " f"(dead:59999, live:{real_port})"
         )
 
         # Send an event that matches the rule
@@ -2691,9 +2564,7 @@ async def test_ha_postgres_multi_host(db_params):
         # Clean up
         matching_uuid = captured_matches[0].matching_uuid
         if matching_uuid:
-            delete_action_info(
-                ruleset_data["name"], matching_uuid
-            )
+            delete_action_info(ruleset_data["name"], matching_uuid)
         disable_leader()
         rs.end_session()
         print("Multi-host test passed")

@@ -207,11 +207,15 @@ class Ruleset:
 
     def update_action_info(self, matching_uuid: str, index: int, action: str):
         """Update an existing action"""
-        self._api.updateActionInfo(self._session_id, matching_uuid, index, action)
+        self._api.updateActionInfo(
+            self._session_id, matching_uuid, index, action
+        )
 
     def action_info_exists(self, matching_uuid: str, index: int) -> bool:
         """Check if an action exists"""
-        return self._api.actionInfoExists(self._session_id, matching_uuid, index)
+        return self._api.actionInfoExists(
+            self._session_id, matching_uuid, index
+        )
 
     def get_action_info(self, matching_uuid: str, index: int) -> str:
         """Get an action by index"""
@@ -219,7 +223,9 @@ class Ruleset:
 
     def get_action_status(self, matching_uuid: str, index: int) -> str:
         """Get the stored status for an action"""
-        return self._api.getActionStatus(self._session_id, matching_uuid, index)
+        return self._api.getActionStatus(
+            self._session_id, matching_uuid, index
+        )
 
     def delete_action_info(self, matching_uuid: str):
         """Delete all actions and matching events for a matching UUID"""
@@ -241,7 +247,8 @@ class Ruleset:
             self._dispatch(result)
 
     def _dispatch(self, rule_match: dict) -> None:
-        # Check if this is the new format with "name", "events", and "matching_uuid"
+        # Check if this is the new format with "name", "events",
+        # and "matching_uuid"
         if "name" in rule_match and "events" in rule_match:
             # New HA format
             rule_name = rule_match["name"]
@@ -253,14 +260,17 @@ class Ruleset:
                 logger.debug(
                     "Recovering matching event for rule %s "
                     "in session %s, matching_uuid=%s",
-                    rule_name, self._session_id, matching_uuid,
+                    rule_name,
+                    self._session_id,
+                    matching_uuid,
                 )
 
             if rule_name in self._rules:
                 logger.debug(
-                    "Calling rule %s in session %s, "
-                    "matching_uuid=%s",
-                    rule_name, self._session_id, matching_uuid,
+                    "Calling rule %s in session %s, " "matching_uuid=%s",
+                    rule_name,
+                    self._session_id,
+                    matching_uuid,
                 )
                 self._rules[rule_name].callback(
                     Matches(data=events_data, matching_uuid=matching_uuid)
@@ -276,7 +286,8 @@ class Ruleset:
                 if name in self._rules:
                     logger.debug(
                         "Calling rule %s in session %s",
-                        name, self._session_id,
+                        name,
+                        self._session_id,
                     )
                     self._rules[name].callback(Matches(data=value))
                 else:
@@ -313,7 +324,9 @@ class RulesetCollection:
             cls.engine = None
 
     @classmethod
-    def initialize_ha(cls, uuid: str, worker_name: str, db_params: dict, config: dict = None):
+    def initialize_ha(
+        cls, uuid: str, worker_name: str, db_params: dict, config: dict = None
+    ):
         """Initialize HA mode with UUID and database configuration"""
         cls.create_engine()
         db_params_json = json.dumps(db_params)
@@ -437,7 +450,9 @@ def advance_time(ruleset_name: str, amount: int, units: str):
 
 
 # Module-level HA functions
-def initialize_ha(uuid: str, worker_name: str, db_params: dict, config: dict = None):
+def initialize_ha(
+    uuid: str, worker_name: str, db_params: dict, config: dict = None
+):
     """
     Initialize HA mode with UUID and database configuration
 
@@ -452,7 +467,9 @@ def initialize_ha(uuid: str, worker_name: str, db_params: dict, config: dict = N
             - password: Database password
         config: Optional HA configuration parameters
     """
-    return RulesetCollection.initialize_ha(uuid, worker_name, db_params, config)
+    return RulesetCollection.initialize_ha(
+        uuid, worker_name, db_params, config
+    )
 
 
 def enable_leader():
@@ -471,39 +488,60 @@ def get_ha_stats() -> Dict:
 
 
 # Action management functions
-def add_action_info(ruleset_name: str, matching_uuid: str, index: int, action: str):
+def add_action_info(
+    ruleset_name: str, matching_uuid: str, index: int, action: str
+):
     """Add an action for a matching event"""
-    return RulesetCollection.get(ruleset_name).add_action_info(matching_uuid, index, action)
+    return RulesetCollection.get(ruleset_name).add_action_info(
+        matching_uuid, index, action
+    )
 
 
-def update_action_info(ruleset_name: str, matching_uuid: str, index: int, action: str):
+def update_action_info(
+    ruleset_name: str, matching_uuid: str, index: int, action: str
+):
     """Update an existing action"""
-    return RulesetCollection.get(ruleset_name).update_action_info(matching_uuid, index, action)
+    return RulesetCollection.get(ruleset_name).update_action_info(
+        matching_uuid, index, action
+    )
 
 
-def action_info_exists(ruleset_name: str, matching_uuid: str, index: int) -> bool:
+def action_info_exists(
+    ruleset_name: str, matching_uuid: str, index: int
+) -> bool:
     """Check if an action exists"""
-    return RulesetCollection.get(ruleset_name).action_info_exists(matching_uuid, index)
+    return RulesetCollection.get(ruleset_name).action_info_exists(
+        matching_uuid, index
+    )
 
 
 def get_action_info(ruleset_name: str, matching_uuid: str, index: int) -> str:
     """Get an action by index"""
-    return RulesetCollection.get(ruleset_name).get_action_info(matching_uuid, index)
+    return RulesetCollection.get(ruleset_name).get_action_info(
+        matching_uuid, index
+    )
 
 
-def get_action_status(ruleset_name: str, matching_uuid: str, index: int) -> str:
+def get_action_status(
+    ruleset_name: str, matching_uuid: str, index: int
+) -> str:
     """Get the stored status for an action"""
-    return RulesetCollection.get(ruleset_name).get_action_status(matching_uuid, index)
+    return RulesetCollection.get(ruleset_name).get_action_status(
+        matching_uuid, index
+    )
 
 
 def delete_action_info(ruleset_name: str, matching_uuid: str):
     """Delete all actions and matching events for a matching UUID"""
-    return RulesetCollection.get(ruleset_name).delete_action_info(matching_uuid)
+    return RulesetCollection.get(ruleset_name).delete_action_info(
+        matching_uuid
+    )
 
 
 def get_partial_event_ids(ruleset_name: str) -> List:
     """Get the IDs of partial events in working memory"""
     return RulesetCollection.get(ruleset_name).get_partial_event_ids()
+
 
 # For test convenience
 def shutdown():

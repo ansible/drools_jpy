@@ -26,7 +26,9 @@ async def establish_async_channel():
         reader, writer = await asyncio.open_connection("localhost", port)
         return reader, writer
     except OSError as e:
-        logger.error("Async channel connect failed to localhost:%s: %s", port, e)
+        logger.error(
+            "Async channel connect failed to localhost:%s: %s", port, e
+        )
         raise
 
 

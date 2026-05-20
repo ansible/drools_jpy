@@ -41,6 +41,43 @@ def _generate_unique_h2_file_path():
     return f"./target/h2-test-{uuid.uuid4()}/eda_ha"
 
 
+def _assert_row_backed_session_without_partial_blob(
+    db_params, ha_uuid, rule_set_name=None
+):
+    count_sql = (
+        "SELECT COUNT(*) FROM drools_ansible_session_state WHERE ha_uuid = ?"
+    )
+    blob_sql = (
+        "SELECT partial_matching_events FROM "
+        "drools_ansible_session_state WHERE ha_uuid = ?"
+    )
+    event_record_sql = (
+        "SELECT COUNT(*) FROM drools_ansible_event_record WHERE ha_uuid = ?"
+    )
+    params = [ha_uuid]
+
+    if rule_set_name is not None:
+        count_sql += " AND rule_set_name = ?"
+        blob_sql += " AND rule_set_name = ?"
+        event_record_sql += " AND rule_set_name = ?"
+        params.append(rule_set_name)
+
+    session_row_count = query_raw_column(db_params, count_sql, *params)
+    assert session_row_count == "1", "session_state row should exist"
+
+    raw_partial_events = query_raw_column(db_params, blob_sql, *params)
+    assert raw_partial_events is None, (
+        "partial_matching_events should remain NULL for row-backed "
+        "sessions with no retained partial events"
+    )
+
+    event_record_count = query_raw_column(db_params, event_record_sql, *params)
+    assert event_record_count == "0", (
+        "drools_ansible_event_record should stay empty when the ruleset "
+        "does not retain partial events"
+    )
+
+
 @pytest.fixture
 def db_params():
     """DB connection parameters for testing"""
@@ -1241,25 +1278,17 @@ async def test_ha_encryption_failover(db_params):
         ), f"event_data should be encrypted, got: {raw_event_data[:50]}"
         print(f"Verified: event_data is encrypted {raw_event_data[:30]}...")
 
-        raw_session_state = query_raw_column(
-            db_params,
-            "SELECT partial_matching_events FROM "
-            "drools_ansible_session_state WHERE ha_uuid = ?",
-            ha_uuid,
-        )
-        assert raw_session_state is not None, "session_state row should exist"
-        assert raw_session_state.startswith("$ENCRYPTED$"), (
-            f"partial_matching_events should be encrypted, "
-            f"got: {raw_session_state[:50]}"
-        )
+        # No partial match, so 0 record in event_record
+        _assert_row_backed_session_without_partial_blob(db_params, ha_uuid)
         print(
-            "Verified: session_state is encrypted "
-            f"({raw_session_state[:30]}...)"
+            "Verified: session_state row exists and "
+            "partial_matching_events remains NULL for row-backed state"
         )
 
     print("RulesetCollection shut down")
 
     # --- Worker 2: take over with same encryption key ---
+    recovered_matches = []
     async with ha_worker_manager(
         ha_uuid,
         "worker-2",
@@ -1267,7 +1296,7 @@ async def test_ha_encryption_failover(db_params):
         enc_ha_config,
         ruleset_data,
         "assignment",
-        [],
+        recovered_matches,
         auto_enable_leader=False,
     ) as ctx:
         # Yield to ensure async handler starts reading
@@ -1279,6 +1308,17 @@ async def test_ha_encryption_failover(db_params):
         # Wait for recovery of encrypted state
         print("Waiting for recovery...")
         await wait_for_async_processing(0.5)
+
+        # Worker-2 should receive the recovered matching event
+        assert (
+            len(recovered_matches) == 1
+        ), "worker-2 should receive exactly one recovered matching event"
+        assert recovered_matches[0].matching_uuid == matching_uuid
+        assert recovered_matches[0].data["first"]["i"] == 67
+        print(
+            f"worker-2 received recovered matching event: "
+            f"matching_uuid={recovered_matches[0].matching_uuid}"
+        )
 
         # Worker-2 should be able to read action info created by
         # worker-1 (encrypted in DB)
@@ -1294,6 +1334,131 @@ async def test_ha_encryption_failover(db_params):
     # Final cleanup
     if RulesetCollection.engine is not None:
         shutdown()
+
+
+@pytest.mark.asyncio
+async def test_ha_encryption_partial_match_failover(db_params):
+    """Test encrypted partial-match EventRecord survives failover.
+
+    Worker-1 sends one event that partially matches a two-condition rule.
+    The retained event is stored encrypted in drools_ansible_event_record.
+    Worker-1 goes down. Worker-2 takes over, recovers the encrypted
+    partial match, and sends the second event to complete the rule —
+    proving the engine correctly decrypted the persisted event record.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    encryption_key = generate_encryption_key()
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    enc_ha_config = {
+        "encryption_key_primary": encryption_key,
+    }
+
+    test_data = load_ast(
+        "asts/rules_with_multiple_conditions_all_assignment.yml"
+    )
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "multiple conditions"
+    captured_matches = []
+
+    # --- Worker 1: send partial match (first condition only) ---
+    async with ha_worker_manager(
+        ha_uuid,
+        "worker-1",
+        db_params,
+        enc_ha_config,
+        ruleset_data,
+        rule_name,
+        captured_matches,
+        shutdown_on_exit=True,
+    ) as ctx:
+        rs1 = ctx["ruleset"]
+        my_callback1 = ctx["callback"]
+
+        print("worker-1 became a Leader (encryption enabled)")
+
+        rs1.assert_event(json.dumps({"i": 0}))
+        print("worker-1 sent event {i: 0} (partial match)")
+        await wait_for_async_processing(0.5)
+
+        assert_rule_not_fired(
+            my_callback1,
+            captured_matches,
+            "Rule should not fire with only one condition matched",
+        )
+        print("Confirmed: rule did not fire on worker-1 (partial match)")
+
+        # Verify retained event_json is encrypted in the DB
+        raw_event_record = query_raw_column(
+            db_params,
+            "SELECT event_json FROM drools_ansible_event_record "
+            "WHERE ha_uuid = ? AND rule_set_name = ?",
+            ha_uuid,
+            ruleset_data["name"],
+        )
+        assert raw_event_record is not None, "event_record row should exist"
+        assert raw_event_record.startswith(
+            "$ENCRYPTED$"
+        ), f"event_json should be encrypted, got: {raw_event_record[:50]}"
+        assert '{"i":0}' not in raw_event_record
+        assert '{"i": 0}' not in raw_event_record
+        print(f"Verified: event_json is encrypted {raw_event_record[:30]}...")
+
+        raw_partial_events = query_raw_column(
+            db_params,
+            "SELECT partial_matching_events"
+            " FROM drools_ansible_session_state"
+            " WHERE ha_uuid = ? AND rule_set_name = ?",
+            ha_uuid,
+            ruleset_data["name"],
+        )
+        assert raw_partial_events is None, (
+            "partial_matching_events should remain NULL for row-backed "
+            "retained partial events"
+        )
+
+    print("RulesetCollection shut down")
+
+    # --- Worker 2: takes over and completes the match ---
+    captured_matches = []
+    async with ha_worker_manager(
+        ha_uuid,
+        "worker-2",
+        db_params,
+        enc_ha_config,
+        ruleset_data,
+        rule_name,
+        captured_matches,
+        auto_enable_leader=False,
+    ) as ctx:
+        rs2 = ctx["ruleset"]
+        my_callback2 = ctx["callback"]
+
+        await wait_for_async_processing(0.1)
+
+        enable_leader()
+        print("worker-2 became a Leader (encryption enabled)")
+
+        # Wait for recovery of the encrypted partial match from worker-1
+        print("Waiting for recovery...")
+        await wait_for_async_processing(0.5)
+
+        # Send second event (i==1) — completes the AllCondition
+        rs2.assert_event(json.dumps({"i": 1}))
+        print("worker-2 sent event {i: 1} (completing the match)")
+
+        assert_rule_fired(
+            my_callback2,
+            captured_matches,
+            "Rule should fire after both conditions are met",
+        )
+        matching_uuid = captured_matches[0].matching_uuid
+        print(f"Rule fired on worker-2! matching_uuid: {matching_uuid}")
+
+        if matching_uuid:
+            delete_action_info(ruleset_data["name"], matching_uuid)
+        print("worker-2 cleaned up")
 
 
 @pytest.mark.asyncio
@@ -1411,43 +1576,142 @@ async def test_ha_key_rotation_with_restart(db_params):
         # Give time for persist
         await wait_for_async_processing(0.5)
 
-        # Verify session state is re-encrypted with new key
-        raw_session_state = query_raw_column(
+        # No partial match, so 0 record in event_record
+        _assert_row_backed_session_without_partial_blob(
             db_params,
-            "SELECT partial_matching_events FROM "
-            "drools_ansible_session_state WHERE ha_uuid = ? "
-            "AND rule_set_name = ?",
             ha_uuid,
             ruleset_data["name"],
         )
-        assert (
-            raw_session_state is not None
-        ), "session_state row should exist after re-encryption"
-        assert raw_session_state.startswith("$ENCRYPTED$"), (
-            f"session_state should be encrypted, got: "
-            f"{raw_session_state[:50]}"
-        )
         print(
-            "Verified: session_state is encrypted "
-            f"({raw_session_state[:30]}...)"
+            "Verified: session_state row exists after restart and "
+            "partial_matching_events remains NULL for row-backed state"
         )
 
-        # Decrypt with only the new key (no secondary) to confirm
-        # re-encryption used the new primary key
-        import jpy
+    # Final cleanup
+    if RulesetCollection.engine is not None:
+        shutdown()
 
-        ha_encryption = jpy.get_type(
-            "org.drools.ansible.rulebook.integration.ha.api.HAEncryption"
+
+@pytest.mark.asyncio
+async def test_ha_key_rotation_with_restart_partial_match(db_params):
+    """Test encryption key rotation for partial-match EventRecord rows.
+
+    Worker-1 sends one event that partially matches a two-condition rule,
+    encrypted with the original key. Worker-1 shuts down. Worker-1
+    restarts with a rotated key pair (new primary + old key as secondary).
+    Recovery decrypts the retained event record using the secondary key.
+    Sending the second event completes the match — proving the engine
+    correctly decrypted the partial state with the rotated keys.
+    """
+
+    ha_uuid = str(uuid.uuid4())
+    original_key = generate_encryption_key()
+    new_key = generate_encryption_key()
+    print(f"HA Cluster UUID: {ha_uuid}")
+
+    original_ha_config = {
+        "encryption_key_primary": original_key,
+    }
+
+    test_data = load_ast(
+        "asts/rules_with_multiple_conditions_all_assignment.yml"
+    )
+    ruleset_data = test_data[0]["RuleSet"]
+    rule_name = "multiple conditions"
+    captured_matches = []
+
+    # === Phase 1: Worker-1 as leader with original key ===
+    async with ha_worker_manager(
+        ha_uuid,
+        "worker-1",
+        db_params,
+        original_ha_config,
+        ruleset_data,
+        rule_name,
+        captured_matches,
+        shutdown_on_exit=True,
+    ) as ctx:
+        rs1 = ctx["ruleset"]
+        my_callback1 = ctx["callback"]
+
+        print("worker-1 became a Leader (original key)")
+
+        rs1.assert_event(json.dumps({"i": 0}))
+        print("worker-1 sent event {i: 0} (partial match)")
+        await wait_for_async_processing(0.5)
+
+        assert_rule_not_fired(
+            my_callback1,
+            captured_matches,
+            "Rule should not fire with only one condition matched",
         )
-        rotated_only = ha_encryption(new_key, None)
-        decrypt_result = rotated_only.decrypt(raw_session_state)
-        assert (
-            not decrypt_result.usedSecondaryKey()
-        ), "Should decrypt with primary (new) key, not secondary"
-        assert (
-            decrypt_result.plaintext() is not None
-        ), "Decrypted session state should not be None"
-        print("Verified: session state re-encrypted with new primary key")
+        print("Confirmed: rule did not fire on worker-1 (partial match)")
+
+        # Verify retained event_json is encrypted with original key
+        raw_event_record = query_raw_column(
+            db_params,
+            "SELECT event_json FROM drools_ansible_event_record "
+            "WHERE ha_uuid = ? AND rule_set_name = ?",
+            ha_uuid,
+            ruleset_data["name"],
+        )
+        assert raw_event_record is not None, "event_record row should exist"
+        assert raw_event_record.startswith(
+            "$ENCRYPTED$"
+        ), f"event_json should be encrypted, got: {raw_event_record[:50]}"
+        print(
+            f"Verified: event_json is encrypted ({raw_event_record[:30]}...)"
+        )
+
+    print("=== Restarting with rotated keys ===")
+
+    # === Phase 2: Restart with rotated keys ===
+    rotated_ha_config = {
+        "encryption_key_primary": new_key,
+        "encryption_key_secondary": original_key,
+    }
+
+    captured_matches = []
+    async with ha_worker_manager(
+        ha_uuid,
+        "worker-1-rotated",
+        db_params,
+        rotated_ha_config,
+        ruleset_data,
+        rule_name,
+        captured_matches,
+        auto_enable_leader=False,
+    ) as ctx:
+        rs2 = ctx["ruleset"]
+        my_callback2 = ctx["callback"]
+
+        await wait_for_async_processing(0.1)
+
+        enable_leader()
+        print("worker-1-rotated became a Leader (new primary + old secondary)")
+
+        # Wait for recovery — should decrypt event record with secondary key
+        print("Waiting for recovery...")
+        await wait_for_async_processing(0.5)
+
+        # Send second event (i==1) — completes the AllCondition
+        rs2.assert_event(json.dumps({"i": 1}))
+        print("worker-1-rotated sent event {i: 1} (completing the match)")
+
+        assert_rule_fired(
+            my_callback2,
+            captured_matches,
+            "Rule should fire after both conditions are met "
+            "(decrypted with rotated key)",
+        )
+        matching_uuid = captured_matches[0].matching_uuid
+        print(
+            f"Rule fired on worker-1-rotated! matching_uuid: {matching_uuid}"
+        )
+
+        if matching_uuid:
+            delete_action_info(ruleset_data["name"], matching_uuid)
+        print("worker-1-rotated cleaned up")
 
     # Final cleanup
     if RulesetCollection.engine is not None:

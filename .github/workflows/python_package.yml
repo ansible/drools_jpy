@@ -28,14 +28,13 @@ jobs:
           distribution: 'zulu'
           java-version: ${{ matrix.java-version }}
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Upgrade pip
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install --upgrade build
-          python3 -m pip install .[tests] .[dev]
+          python3 -m pip install --upgrade pip==26.0 build==1.2.2
+          python3 -m pip install .[tests] .[dev] # NOSONAR - dynamic local package extras
       - name: Run flake8
         run: flake8 .
       - name: Run formatter

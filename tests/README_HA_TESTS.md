@@ -59,7 +59,7 @@ source venv/bin/activate
 The test runs with H2 file-backed database by default. No external database needed:
 
 ```bash
-python3.12 -m pytest tests/test_ha.py -v
+python3 -m pytest tests/test_ha.py -v
 ```
 
 DB files are created under `target` directory. They should be automatically cleaned up after each test.
@@ -70,26 +70,26 @@ To run tests with PostgreSQL instead of H2, start the database and set the envir
 
 ```bash
 docker-compose up -d
-DROOLS_HA_DB_TYPE=postgres python3.12 -m pytest tests/test_ha.py -v
+DROOLS_HA_DB_TYPE=postgres python3 -m pytest tests/test_ha.py -v
 ```
 
 ### Run Specific Test
 
 ```bash
 # Test HA initialization and leader lifecycle
-python3.12 -m pytest tests/test_ha.py::test_ha_initialization_and_leader_lifecycle -v
+python3 -m pytest tests/test_ha.py::test_ha_initialization_and_leader_lifecycle -v
 
 # Test ActionInfo operations
-python3.12 -m pytest tests/test_ha.py::test_action_info_lifecycle -v
+python3 -m pytest tests/test_ha.py::test_action_info_lifecycle -v
 
 # Test HA statistics
-python3.12 -m pytest tests/test_ha.py::test_ha_stats -v
+python3 -m pytest tests/test_ha.py::test_ha_stats -v
 
 # Test multiple actions
-python3.12 -m pytest tests/test_ha.py::test_multiple_action_infos -v
+python3 -m pytest tests/test_ha.py::test_multiple_action_infos -v
 
 # Test failover scenario
-python3.12 -m pytest tests/test_ha.py::test_ha_failover_scenario -v
+python3 -m pytest tests/test_ha.py::test_ha_failover_scenario -v
 ```
 
 ### Run with Debug Logging
@@ -97,7 +97,7 @@ python3.12 -m pytest tests/test_ha.py::test_ha_failover_scenario -v
 To see both Python and Drools jar debug logs:
 
 ```bash
-python3.12 -m pytest tests/test_ha.py -s --log-cli-level=DEBUG
+python3 -m pytest tests/test_ha.py -s --log-cli-level=DEBUG
 ```
 
 ## Test Coverage

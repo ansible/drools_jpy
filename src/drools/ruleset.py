@@ -95,6 +95,8 @@ def _make_jpy_instance():
     tmp_dir = tempfile.gettempdir()
     jvm_options.append(f"-Djava.io.tmpdir={tmp_dir}")
 
+    jvm_options.append("-XX:-UseBASE64Intrinsics")
+
     jpyutil.init_jvm(
         jvm_maxmem=max_mem,
         jvm_classpath=[jar_file_path],

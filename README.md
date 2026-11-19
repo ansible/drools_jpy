@@ -34,7 +34,13 @@ Needs
    isort .		
 ```
 
-# To publish the package to PyPi
+# Publish the package to PyPI
+
+The preferred publishing process is to create and publish a GitHub Release
+for the package version. The `pypi-publish.yaml` workflow will build the
+distributions and publish them to PyPI using trusted publishing (OIDC).
+
+## Manual publishing fallback
 
 ```
 python3 -m pip install --upgrade build
